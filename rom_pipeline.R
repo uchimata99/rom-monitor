@@ -301,21 +301,24 @@ normalize_case <- function(meta, cfg) {
 }
 
 # Who fills a questionnaire in. The source marks the therapist's own forms with
-# a prefix on the questionnaire name, so a prefix list is the rule and the
-# explicit name list is only for exceptions the prefix misses.
+# a marker somewhere inside the questionnaire name - the names mix Hebrew and
+# English and the marker is not necessarily at the front - so the rule is a
+# substring test, and the explicit name list is only for exceptions the marker
+# misses.
 #
-# A plain prefix test on the trimmed name, deliberately: no case folding and no
-# regular expression, so this and the browser build cannot drift apart on an
-# edge case. startsWith is spelled out with substr because R has no such verb
-# that is guaranteed not to reinterpret the pattern.
+# Case-insensitive and literal: fixed = TRUE so a marker containing a dot or a
+# bracket cannot quietly turn into a wildcard, which is also what keeps this
+# identical to makeRespondent() in the page. Same matching the test-staff names
+# already use.
 respondent_of <- function(q, cfg) {
   names_ <- trimws(cfg$therapist_questionnaires %||% character(0))
-  pref   <- trimws(cfg$therapist_questionnaire_prefixes %||% character(0))
-  pref   <- pref[nzchar(pref)]
+  marks  <- tolower(trimws(cfg$therapist_questionnaire_contains %||% character(0)))
+  marks  <- marks[nzchar(marks)]
   t <- trimws(ifelse(is.na(q), "", q))
   out <- ifelse(t %in% names_, "therapist", "patient")
-  for (p in pref) {
-    hit <- out == "patient" & substr(t, 1, nchar(p)) == p
+  low <- tolower(t)
+  for (m in marks) {
+    hit <- out == "patient" & grepl(m, low, fixed = TRUE)
     out[hit] <- "therapist"
   }
   out
@@ -620,8 +623,8 @@ prov <- list(
     questionnaires_kept = length(unique(clean$questionnaire)),
     occasions_patient_answered_form = sum(occ$respondent != "therapist"),
     occasions_therapist_answered_form = sum(occ$respondent == "therapist"),
-    therapist_questionnaire_prefixes =
-      length(cfg$therapist_questionnaire_prefixes %||% character(0)),
+    therapist_questionnaire_markers =
+      length(cfg$therapist_questionnaire_contains %||% character(0)),
     rows_dropped_excluded_questionnaire = n_dropped_q,
     values_changed_between_exports = length(changed),
     date_min = min(clean$date), date_max = max(clean$date)))

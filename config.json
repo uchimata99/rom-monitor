@@ -12,7 +12,8 @@
   "_exclude_comment": "Rules below are confident enough to remove the patient outright.",
   "test_staff_names": [
     "Yoni Shalom",
-    "Joni Shalom"
+    "Joni Shalom",
+    "Michal Cohen"
   ],
   "test_text_patterns_exclude": [
     "test notes",
@@ -37,11 +38,11 @@
   "excluded_questionnaires": [
     "Test placeholders"
   ],
-  "_respondent_comment": "Some questionnaires are filled in BY the therapist ABOUT the patient. They arrive on the same export row as the patient's own answers, so unless they are told apart a therapist-rated form is counted as patient adherence and the response rate measures two different things at once. The source marks them with a prefix on the questionnaire name - put that prefix here. Matching is a plain prefix test on the trimmed name: no case folding, no regex, so all pipelines classify identically.",
-  "therapist_questionnaire_prefixes": [
+  "_respondent_comment": "Some questionnaires are filled in BY the therapist ABOUT the patient. They arrive on the same export row as the patient's own answers, so unless they are told apart a therapist-rated form is counted as patient adherence and the response rate measures two different things at once. The source marks them with a marker somewhere INSIDE the questionnaire name - the names mix Hebrew and English and the marker is not necessarily at the front. Matching is a case-insensitive literal substring test on the trimmed name: no regex, so a marker containing a dot or a bracket cannot turn into a wildcard, and all pipelines classify identically.",
+  "therapist_questionnaire_contains": [
     "שאלון מטפל"
   ],
-  "_respondent_exceptions_comment": "Exact questionnaire names that are therapist-filled but do not carry the prefix. Only for exceptions - the prefix list is the rule.",
+  "_respondent_exceptions_comment": "Exact questionnaire names that are therapist-filled but do not carry the marker. Only for exceptions - the marker list is the rule.",
   "therapist_questionnaires": [],
   "normalize_text_case_columns": [
     "Primary Diagnosis",

@@ -476,21 +476,25 @@ function normalizeCase(metaRows, cfg) {
   return metaRows;
 }
 
-/** Who fills a questionnaire in. The source marks the therapist's own forms
-    with a prefix on the questionnaire name, so a prefix list is the rule and the
-    explicit name list is only for exceptions the prefix misses.
+/** Who fills a questionnaire in. The source marks the therapist's own forms with
+    a marker somewhere inside the questionnaire name - the names mix Hebrew and
+    English and the marker is not necessarily at the front - so the rule is a
+    substring test, and the explicit name list is only for exceptions the marker
+    misses.
 
-    Matching is a plain prefix test on the trimmed name, deliberately: no case
-    folding and no regular expression, so the R pipeline can do exactly the same
-    thing and the two cannot drift apart on an edge case. */
+    Case-insensitive and literal: no regular expression, so a marker containing a
+    dot or a bracket cannot quietly turn into a wildcard, and the R pipeline can
+    do exactly the same thing without the two drifting apart. This is the same
+    matching the test-staff names already use. */
 function makeRespondent(cfg) {
   const names = new Set((cfg.therapist_questionnaires || []).map((x) => String(x).trim()));
-  const prefixes = (cfg.therapist_questionnaire_prefixes || [])
-    .map((x) => String(x).trim()).filter((x) => x !== "");
+  const marks = (cfg.therapist_questionnaire_contains || [])
+    .map((x) => String(x).trim().toLowerCase()).filter((x) => x !== "");
   return (q) => {
     const t = String(q ?? "").trim();
     if (names.has(t)) return "therapist";
-    for (const p of prefixes) if (t.startsWith(p)) return "therapist";
+    const low = t.toLowerCase();
+    for (const m of marks) if (low.includes(m)) return "therapist";
     return "patient";
   };
 }
@@ -848,7 +852,7 @@ function runPipeline(files, cfg, onProgress = () => {}) {
     questionnaires_kept: new Set(clean.map((r) => r.questionnaire)).size,
     occasions_patient_answered_form: occ.filter((r) => r.respondent !== "therapist").length,
     occasions_therapist_answered_form: occ.filter((r) => r.respondent === "therapist").length,
-    therapist_questionnaire_prefixes: (cfg.therapist_questionnaire_prefixes || []).length,
+    therapist_questionnaire_markers: (cfg.therapist_questionnaire_contains || []).length,
     rows_dropped_excluded_questionnaire: nDroppedQ,
     values_changed_between_exports:
       new Set(changes.map((c) => `${c.patient_uuid}\r${c.questionnaire}\r${c.occasion}\r${c.date}\r${c.field}`)).size,
@@ -1230,8 +1234,35 @@ function apiState() {
     therefore attributed to that patient's own therapist - the case manager, or
     the first collaborator. That is right whenever the treating therapist is the
     one who rates, and wrong for a form filled in by a supervisor or a stand-in. */
+const AGE_BANDS = [[0,17,"0–17"],[18,24,"18–24"],[25,34,"25–34"],[35,44,"35–44"],
+                   [45,54,"45–54"],[55,64,"55–64"],[65,200,"65+"]];
+const ageBand = (a) => {
+  const n = parseFloat(a);
+  if (!Number.isFinite(n)) return "לא ידוע";
+  for (const [lo, hi, lab] of AGE_BANDS) if (n >= lo && n <= hi) return lab;
+  return "לא ידוע";
+};
+const GENDER_HE = { male: "גבר", female: "אישה" };
+// The labels are Hebrew, so sorting them as text puts "65 ומעלה" before "עד 17".
+// Order by the band's own position instead, unknown age last.
+const ageOrder = (lab) => {
+  const i = AGE_BANDS.findIndex(([, , l]) => l === lab);
+  return i < 0 ? AGE_BANDS.length : i;
+};
+
 function therapistForms(occ, tocc, cov) {
   const answered = tocc.reduce((a, r) => a + r.answered_occ, 0);
+
+  // The occasion rows carry the patient key but not the patient's attributes, so
+  // the cuts below need the join. Done once here rather than per breakdown.
+  const by = new Map(cov.map((c) => [c.patient_uuid, c]));
+  const cut = tocc.map((r) => {
+    const c = by.get(r.patient_uuid) || {};
+    return { ...r,
+      diagnosis: (c["Primary Diagnosis"] || "").trim() || "ללא אבחנה",
+      gender: GENDER_HE[String(c.Gender || "").trim().toLowerCase()] || "לא צוין",
+      age_band: ageBand(c.Age) };
+  });
 
   // Pairing without assuming anything about the scales: on how many of the days
   // a therapist rated a patient did that patient also answer for themselves?
@@ -1255,6 +1286,12 @@ function therapistForms(occ, tocc, cov) {
     months: rate(tocc, "month").sort((a, b) => (a.month < b.month ? -1 : 1)),
     by_therapist: rate(tocc, "therapist").sort((a, b) => b.sent - a.sent),
     by_questionnaire: rate(tocc, "questionnaire").sort((a, b) => b.sent - a.sent),
+    by_diagnosis: rate(cut, "diagnosis").sort((a, b) => b.sent - a.sent),
+    by_gender: rate(cut, "gender").sort((a, b) => b.sent - a.sent),
+    by_age: rate(cut, "age_band").sort((a, b) => ageOrder(a.age_band) - ageOrder(b.age_band)),
+    grid: rate(cut, ["therapist", "month"]).filter((g) => g.sent >= 3),
+    completeness: ["complete", "partial", "empty", "not_answered"].map((k) => ({
+      state: k, n: tocc.filter((r) => r.completeness === k).length })),
     paired: { therapist_days: tKeys.size, also_patient: both },
   };
 }
@@ -1841,7 +1878,7 @@ function catalogCard(){
   const t=cat.filter(c=>c.respondent==='therapist').length;
   const c=C('div',{className:'card'});
   c.innerHTML=`<h2>אילו שאלונים נחשבים של המטפל</h2>
-    <p class="sub">הסיווג נקבע בקובץ הכללים, לפי קידומת בשם השאלון. ${
+    <p class="sub">הסיווג נקבע בקובץ הכללים, לפי סימן שמופיע בשם השאלון. ${
       t?`${NF.format(t)} מתוך ${NF.format(cat.length)} השאלונים סווגו כשאלוני מטפל`
        :'כרגע אף שאלון לא סווג — כל השאלונים נספרים כהיענות המטופל'}</p>
     <div class="scroll"><table><thead><tr><th>שאלון</th><th>מי עונה</th><th>נשלחו</th></tr></thead><tbody>${
@@ -1866,8 +1903,8 @@ function renderTherapist(){
        <p class="sub">עדיין לא סווג אף שאלון כשאלון שהמטפל ממלא, ולכן אין מה להציג כאן.</p>
        <div class="hint" style="margin:14px 0 0"><b>למה זה משנה.</b> שאלוני המטפל מגיעים באותה שורת ייצוא כמו התשובות של המטופל. כל עוד לא מפרידים ביניהם, טופס שהמטפל מילא נספר כאילו המטופל ענה — ושיעור ההיענות שבמסך הסקירה מודד שני דברים שונים בבת אחת.</p>
        <ol class="steps" style="margin-top:14px">
-         <li>הסתכל בטבלה שלמטה ומצא את הקידומת המשותפת לשמות של שאלוני המטפל</li>
-         <li>פתח את קובץ הכללים שבתיקיית הארכיון והוסף אותה תחת רשימת הקידומות</li>
+         <li>הסתכל בטבלה שלמטה ומצא את הסימן המשותף לשמות של שאלוני המטפל</li>
+         <li>פתח את קובץ הכללים שבתיקיית הארכיון והוסף אותו תחת רשימת הסימנים</li>
          <li>רענן את הדף — המסך הזה יתמלא, ושיעור ההיענות של המטופלים יתוקן מעצמו</li>
        </ol>`}));
     p.appendChild(catalogCard());
@@ -1906,6 +1943,42 @@ function renderTherapist(){
     barChart([...T.by_questionnaire].sort((a,b)=>b.rate-a.rate),
       {cat:'questionnaire',val:'rate',w:640,sub:d=>`נשלחו ${NF.format(d.sent)} · מולאו ${NF.format(d.answered)}`})));
   p.appendChild(g);
+
+  // the numbers themselves, before any chart smooths them over
+  const COMP_HE={complete:'מולא במלואו',partial:'מולא חלקית',empty:'נפתח ולא מולא',not_answered:'לא נענה כלל'};
+  const sm=C('div',{className:'card'});
+  sm.innerHTML=`<h2>סיכום המספרים</h2>
+    <p class="sub">כל טופס שנשלח, לפי מה שקרה איתו בפועל</p>
+    <table><thead><tr><th>מצב</th><th>טפסים</th><th>חלק מהכול</th></tr></thead><tbody>${
+      T.completeness.map(r=>`<tr><td>${COMP_HE[r.state]||r.state}</td><td class="mono">${NF.format(r.n)}</td><td class="mono">${pct(T.sent?r.n/T.sent:0)}</td></tr>`).join('')
+    }<tr><td><b>סך הכול</b></td><td class="mono"><b>${NF.format(T.sent)}</b></td><td class="mono"><b>100%</b></td></tr></tbody></table>`;
+  p.appendChild(sm);
+
+  const cuts=[['לפי אבחנת המטופל','by_diagnosis','diagnosis'],
+              ['לפי מין המטופל','by_gender','gender'],
+              ['לפי קבוצת גיל','by_age','age_band']];
+  const g2=C('div',{className:'grid2'});
+  cuts.forEach(([title,key,cat])=>{
+    const rows=T[key]||[];
+    g2.appendChild(box(title,'שיעור המילוי, ולצדו כמה טפסים עומדים מאחורי כל שורה',
+      rows.length?barChart(rows,{cat,val:'rate',w:640,
+        sub:d=>`נשלחו ${NF.format(d.sent)} · מולאו ${NF.format(d.answered)}`})
+        :thin('אין נתונים לפילוח הזה')));
+  });
+  p.appendChild(g2);
+
+  if((T.grid||[]).length){
+    const months=[...new Set(T.grid.map(d=>d.month))].sort();
+    const ths=[...new Set(T.grid.map(d=>d.therapist))];
+    const order=T.by_therapist.filter(t=>ths.includes(t.therapist)).map(t=>t.therapist);
+    const idx={}; T.grid.forEach(d=>idx[d.therapist+'|'+d.month]=d);
+    const hm=heatmap(order,months,(r,c)=>idx[r+'|'+c],{w:Math.max(900,months.length*30+160)});
+    const hc=box('מטפל על פני זמן','כל תא הוא שיעור המילוי של אותו מטפל באותו חודש. אפור פירושו פחות משלושה טפסים. כהה יותר, מילוי גבוה יותר',hm);
+    const lg=C('div',{className:'legend'});
+    lg.innerHTML='<span>0%</span>'+SEQ.map(x=>`<i style="background:${x}"></i>`).join('')+
+      '<span>100%</span><i style="border:1px dashed var(--line);background:none;margin-inline-start:14px"></i><span>מעט מדי נתונים</span>';
+    hc.appendChild(lg); p.appendChild(hc);
+  }
 
   const tb=C('div',{className:'card'});
   tb.innerHTML=`<h2>כל המטפלים</h2><p class="sub">כולל מי שיש לו מעט טפסים ולכן לא נכנס לתרשים</p>
