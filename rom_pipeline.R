@@ -86,18 +86,34 @@ say <- function(...) cat(..., "\n", sep = "")
 
 # ---------------------------------------------------------------- helpers
 
-# Chronological order of exports: the timestamp in the filename, else mtime.
+# Chronological order of exports, and it has to come from the NAME wherever it
+# can. The fallback is the file's modification time, which is not the same
+# thing: copying an archive to another machine, or a sync client rewriting a
+# file in place, resets it. Since `newest_file_wins` decides which value
+# survives a disagreement between exports, order is not cosmetic. Files with no
+# stamp in the name sort after every file that has one - the 1e12 offset - so
+# they can never silently claim to be the newest.
+#
+# Both separated and run-together stamps are accepted: 20260901_1740 and
+# 2026-09-01_17-40 are the same instant. Kept identical to fileSortKey() in the
+# page, down to the range checks.
+STAMP_RE <- paste0("([0-9]{4})[-_.]?([0-9]{2})[-_.]?([0-9]{2})",
+                   "([ _T-]?([0-9]{2})[:._-]?([0-9]{2}))?")
+
 file_sort_key <- function(paths) {
-  m <- regmatches(basename(paths),
-                  regexpr("[0-9]{8}([_-]?[0-9]{4})?", basename(paths)))
   key <- rep(NA_real_, length(paths))
   for (i in seq_along(paths)) {
     nm <- basename(paths[i])
-    mm <- regmatches(nm, regexec("([0-9]{8})[_-]?([0-9]{4})?", nm))[[1]]
-    if (length(mm) >= 2 && !is.na(mm[2]) && nzchar(mm[2])) {
-      hhmm <- if (length(mm) >= 3 && !is.na(mm[3]) && nzchar(mm[3])) mm[3] else "0000"
-      d <- as.POSIXct(paste0(mm[2], hhmm), format = "%Y%m%d%H%M", tz = "UTC")
-      if (!is.na(d)) key[i] <- as.numeric(d)
+    mm <- regmatches(nm, regexec(STAMP_RE, nm, perl = TRUE))[[1]]
+    if (length(mm) >= 4 && nzchar(mm[2])) {
+      y  <- as.integer(mm[2]); mo <- as.integer(mm[3]); d <- as.integer(mm[4])
+      hh <- if (length(mm) >= 6 && nzchar(mm[6])) as.integer(mm[6]) else 0L
+      mi <- if (length(mm) >= 7 && nzchar(mm[7])) as.integer(mm[7]) else 0L
+      if (mo >= 1 && mo <= 12 && d >= 1 && d <= 31 && hh <= 23 && mi <= 59) {
+        ts <- as.POSIXct(sprintf("%04d%02d%02d%02d%02d", y, mo, d, hh, mi),
+                         format = "%Y%m%d%H%M", tz = "UTC")
+        if (!is.na(ts)) key[i] <- as.numeric(ts)
+      }
     }
     if (is.na(key[i])) key[i] <- as.numeric(file.info(paths[i])$mtime) + 1e12
   }

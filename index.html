@@ -310,14 +310,23 @@ function isoDate(s) {
 }
 
 /** Chronological order of exports: timestamp in the filename, else mtime. */
+/* Chronological order of exports, and it has to come from the NAME wherever it
+   can. The fallback is the file's modification time, which is not the same
+   thing: copying an archive to another machine, or a sync client rewriting a
+   file in place, resets it. Since `newest_file_wins` decides which value
+   survives a disagreement between exports, order is not cosmetic.
+
+   Both separated and run-together stamps are accepted - 20260901_1740 and
+   2026-09-01_17-40 are the same instant - because the source has been seen to
+   write both. */
 function fileSortKey(name, mtime) {
-  const m = /(\d{8})[_-]?(\d{4})?/.exec(name);
+  const m = /(\d{4})[-_.]?(\d{2})[-_.]?(\d{2})(?:[ _T-]?(\d{2})[:\-_.]?(\d{2}))?/.exec(name);
   if (m) {
-    const stamp = m[1] + (m[2] || "0000");
-    const y = +stamp.slice(0, 4), mo = +stamp.slice(4, 6), d = +stamp.slice(6, 8);
-    const hh = +stamp.slice(8, 10), mi = +stamp.slice(10, 12);
-    const t = Date.UTC(y, mo - 1, d, hh, mi);
-    if (Number.isFinite(t)) return [0, t, name];
+    const y = +m[1], mo = +m[2], d = +m[3], hh = +(m[4] || 0), mi = +(m[5] || 0);
+    if (mo >= 1 && mo <= 12 && d >= 1 && d <= 31 && hh <= 23 && mi <= 59) {
+      const t = Date.UTC(y, mo - 1, d, hh, mi);
+      if (Number.isFinite(t)) return [0, t, name];
+    }
   }
   return [1, mtime || 0, name];
 }
