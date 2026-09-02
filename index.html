@@ -112,6 +112,7 @@ pre{background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:
   <nav>
     <button class="on" data-p="over">סקירה</button>
     <button data-p="adh">היענות</button>
+    <button data-p="thr">שאלוני מטפל</button>
     <button data-p="samp">בונה מדגם</button>
     <button data-p="pat">מטופל</button>
     <button data-p="upd">עדכון</button>
@@ -124,6 +125,7 @@ pre{background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:
 <main>
   <div id="over" class="panel on"><div class="spin">טוען…</div></div>
   <div id="adh" class="panel"></div>
+  <div id="thr" class="panel"></div>
   <div id="samp" class="panel"></div>
   <div id="pat" class="panel"></div>
   <div id="upd" class="panel"></div>
@@ -465,6 +467,25 @@ function normalizeCase(metaRows, cfg) {
   return metaRows;
 }
 
+/** Who fills a questionnaire in. The source marks the therapist's own forms
+    with a prefix on the questionnaire name, so a prefix list is the rule and the
+    explicit name list is only for exceptions the prefix misses.
+
+    Matching is a plain prefix test on the trimmed name, deliberately: no case
+    folding and no regular expression, so the R pipeline can do exactly the same
+    thing and the two cannot drift apart on an edge case. */
+function makeRespondent(cfg) {
+  const names = new Set((cfg.therapist_questionnaires || []).map((x) => String(x).trim()));
+  const prefixes = (cfg.therapist_questionnaire_prefixes || [])
+    .map((x) => String(x).trim()).filter((x) => x !== "");
+  return (q) => {
+    const t = String(q ?? "").trim();
+    if (names.has(t)) return "therapist";
+    for (const p of prefixes) if (t.startsWith(p)) return "therapist";
+    return "patient";
+  };
+}
+
 /* ----------------------------------------------------- derived summaries */
 
 function buildItemUsage(clean, cfg) {
@@ -473,20 +494,21 @@ function buildItemUsage(clean, cfg) {
     if (r.status === ST_ANSWERED && ITEM_RE.test(r.field))
       answeredOcc.add(`${r.patient_uuid}\r${r.questionnaire}\r${r.occasion}`);
 
-  const tot = new Map(), yes = new Map();
+  const tot = new Map(), yes = new Map(), who = new Map();
   for (const r of clean) {
     if (!ITEM_RE.test(r.field)) continue;
     if (!answeredOcc.has(`${r.patient_uuid}\r${r.questionnaire}\r${r.occasion}`)) continue;
     const k = r.questionnaire + "\r" + r.field;
     tot.set(k, (tot.get(k) || 0) + 1);
     yes.set(k, (yes.get(k) || 0) + (r.status === ST_ANSWERED ? 1 : 0));
+    who.set(k, r.respondent);
   }
   const thr = parseFloat(cfg.active_item_min_response_rate ?? 0.05);
   return [...tot.keys()].sort().map((k) => {
     const [questionnaire, field] = k.split("\r");
     const rate = roundHalfEven(yes.get(k) / tot.get(k), 4);
     return {
-      questionnaire, field,
+      questionnaire, respondent: who.get(k), field,
       occasions_answered_questionnaire: tot.get(k),
       item_answered: yes.get(k),
       response_rate: rate,
@@ -504,8 +526,8 @@ function buildOccasions(clean, usage) {
     const k = `${r.patient_uuid}\r${r.questionnaire}\r${r.occasion}\r${r.date}`;
     let a = agg.get(k);
     if (!a) {
-      a = { n_items: 0, n_answered: 0, n_blank: 0, n_not_answered: 0,
-            n_active_items: 0, n_active_answered: 0 };
+      a = { respondent: r.respondent, n_items: 0, n_answered: 0, n_blank: 0,
+            n_not_answered: 0, n_active_items: 0, n_active_answered: 0 };
       agg.set(k, a);
     }
     a.n_items++;
@@ -628,9 +650,16 @@ function buildCoverage(cleanMeta, occ, sessions) {
     if (!th) th = ((m["Collaborators"] || "").split(",")[0] || "").trim();
     if (!th) th = "ללא שיוך";
 
-    const o = byPat.get(pu) || [];
+    const all = byPat.get(pu) || [];
+    // The patient columns describe the patient's own adherence. A form the
+    // therapist filled in is real data about this patient, but it is not the
+    // patient answering, so it is counted separately rather than folded in.
+    const o = all.filter((r) => r.respondent !== "therapist");
+    const t = all.filter((r) => r.respondent === "therapist");
     const comp = o.map((r) => r.completeness);
     const count = (v) => comp.filter((c) => c === v).length;
+    const tcomp = t.map((r) => r.completeness);
+    const tcount = (v) => tcomp.filter((c) => c === v).length;
     const r = {
       patient_uuid: pu, Gender: m["Gender"], Age: m["Age"],
       "Primary Diagnosis": m["Primary Diagnosis"],
@@ -654,8 +683,17 @@ function buildCoverage(cleanMeta, occ, sessions) {
     r.first_session = s.length ? s.reduce((a, x) => (x.date < a ? x.date : a), s[0].date) : null;
     r.last_session = s.length ? s.reduce((a, x) => (x.date > a ? x.date : a), s[0].date) : null;
 
+    r.n_therapist_occasions = t.length;
+    r.n_therapist_questionnaires = new Set(t.map((x) => x.questionnaire)).size;
+    r.n_therapist_complete = tcount("complete");
+    r.n_therapist_responded = tcount("complete") + tcount("partial");
+    r.first_therapist_date = t.length
+      ? t.reduce((a, x) => (x.date < a ? x.date : a), t[0].date) : null;
+    r.last_therapist_date = t.length
+      ? t.reduce((a, x) => (x.date > a ? x.date : a), t[0].date) : null;
+
     const counts = new Map();
-    for (const x of o) counts.set(x.questionnaire, (counts.get(x.questionnaire) || 0) + 1);
+    for (const x of all) counts.set(x.questionnaire, (counts.get(x.questionnaire) || 0) + 1);
     for (const q of questionnaires) r["n::" + q] = counts.get(q) || 0;
     return r;
   });
@@ -765,6 +803,12 @@ function runPipeline(files, cfg, onProgress = () => {}) {
   const cleanMeta = metaRows.filter((m) => !m.exclude_reason);
   const keepIds = new Set(cleanMeta.map((m) => m["Patient uuid"]));
   const clean = kept.filter((r) => keepIds.has(r.patient_uuid));
+  // Some questionnaires are filled in BY the therapist ABOUT the patient. They
+  // ride in on the same export row as the patient's own answers, so unless they
+  // are told apart they get counted as patient adherence - which silently mixes
+  // two different measures into one rate.
+  const whoAnswers = makeRespondent(cfg);
+  for (const r of clean) r.respondent = whoAnswers(r.questionnaire);
   clean.sort((a, b) =>
     cmp3(a.patient_uuid, b.patient_uuid) || cmp3(a.questionnaire, b.questionnaire) ||
     cmp3(a.date, b.date) || cmp3(a.field, b.field));
@@ -793,6 +837,9 @@ function runPipeline(files, cfg, onProgress = () => {}) {
     occasions_empty: occ.filter((r) => r.completeness === "empty").length,
     occasions_not_answered: occ.filter((r) => r.completeness === "not_answered").length,
     questionnaires_kept: new Set(clean.map((r) => r.questionnaire)).size,
+    occasions_patient_answered_form: occ.filter((r) => r.respondent !== "therapist").length,
+    occasions_therapist_answered_form: occ.filter((r) => r.respondent === "therapist").length,
+    therapist_questionnaire_prefixes: (cfg.therapist_questionnaire_prefixes || []).length,
     rows_dropped_excluded_questionnaire: nDroppedQ,
     values_changed_between_exports:
       new Set(changes.map((c) => `${c.patient_uuid}\r${c.questionnaire}\r${c.occasion}\r${c.date}\r${c.field}`)).size,
@@ -809,14 +856,14 @@ function runPipeline(files, cfg, onProgress = () => {}) {
 /* The same column lists the other two pipelines write, so the outputs can be
    compared file for file. */
 const COLUMNS = {
-  master_long: ["patient_uuid", "questionnaire", "occasion", "date", "field",
+  master_long: ["patient_uuid", "questionnaire", "respondent", "occasion", "date", "field",
                 "value", "status", "answered", "instance", "first_seen_file",
                 "last_seen_file", "n_exports"],
-  occasions: ["patient_uuid", "questionnaire", "occasion", "date", "n_items",
+  occasions: ["patient_uuid", "questionnaire", "respondent", "occasion", "date", "n_items",
               "n_answered", "n_blank", "n_not_answered", "n_active_items",
               "n_active_answered", "n_missing", "completeness", "pct_answered",
               "total_score"],
-  item_usage: ["questionnaire", "field", "occasions_answered_questionnaire",
+  item_usage: ["questionnaire", "respondent", "field", "occasions_answered_questionnaire",
                "item_answered", "response_rate", "active"],
   value_changes: ["patient_uuid", "questionnaire", "occasion", "date", "field",
                   "source_file", "value", "status"],
@@ -827,7 +874,10 @@ const COLUMNS = {
              "n_complete_occasions", "n_partial_occasions", "n_empty_occasions",
              "n_not_answered_occasions", "n_responded_occasions",
              "first_date", "last_date", "n_sessions", "n_weeks_present",
-             "n_weeks_complete", "first_session", "last_session"],
+             "n_weeks_complete", "first_session", "last_session",
+             "n_therapist_occasions", "n_therapist_questionnaires",
+             "n_therapist_complete", "n_therapist_responded",
+             "first_therapist_date", "last_therapist_date"],
 };
 
 function exportTables(res) {
@@ -1112,7 +1162,11 @@ async function saveVerify(kind, payload) {
 function apiState() {
   const L = DB.light;
   if (!L) return { ready: false };
-  const occ = withDerived(L.occ, L.coverage);
+  const allOcc = withDerived(L.occ, L.coverage);
+  // Every screen that says "adherence" means the patient answering. Therapist
+  // forms are held apart and get their own screen.
+  const occ = allOcc.filter((r) => r.respondent !== "therapist");
+  const tocc = allOcc.filter((r) => r.respondent === "therapist");
   const cov = L.coverage;
 
   const months = rate(occ, "month").sort((a, b) => (a.month < b.month ? -1 : 1));
@@ -1144,12 +1198,55 @@ function apiState() {
       flagged: flagged.length, files: DB.files.length,
     },
     months, therapists: ther, questionnaires: ques, grid, patients,
-    questionnaire_list: [...new Set(occ.map((r) => r.questionnaire))].sort(),
+    therapist_forms: therapistForms(occ, tocc, cov),
+    questionnaire_catalog: [...new Set(allOcc.map((r) => r.questionnaire))].sort()
+      .map((q) => {
+        const rows = allOcc.filter((r) => r.questionnaire === q);
+        return { questionnaire: q, respondent: rows[0].respondent, sent: rows.length };
+      }),
+    questionnaire_list: [...new Set(allOcc.map((r) => r.questionnaire))].sort(),
     therapist_list: [...new Set(cov.map((c) => c.therapist).filter(Boolean))].sort(),
     diagnosis_list: [...new Set(cov.map((c) => c["Primary Diagnosis"]).filter(Boolean))].sort(),
     flagged_uuids: flagged,
     runs: [],
     verification: verificationStatus(),
+  };
+}
+
+/** The therapist-report side, kept in the same shape as the patient side so the
+    screens can reuse the same charts.
+
+    One thing worth saying out loud: the export does not record WHICH therapist
+    filled a form in, only which patient it is about. Every therapist form is
+    therefore attributed to that patient's own therapist - the case manager, or
+    the first collaborator. That is right whenever the treating therapist is the
+    one who rates, and wrong for a form filled in by a supervisor or a stand-in. */
+function therapistForms(occ, tocc, cov) {
+  const answered = tocc.reduce((a, r) => a + r.answered_occ, 0);
+
+  // Pairing without assuming anything about the scales: on how many of the days
+  // a therapist rated a patient did that patient also answer for themselves?
+  const pKeys = new Set(occ.map((r) => r.patient_uuid + "\r" + r.date));
+  const tKeys = new Set(tocc.map((r) => r.patient_uuid + "\r" + r.date));
+  let both = 0;
+  for (const k of tKeys) if (pKeys.has(k)) both++;
+
+  const dates = tocc.map((r) => r.date);
+  return {
+    sent: tocc.length,
+    answered,
+    complete: tocc.filter((r) => r.completeness === "complete").length,
+    rate: tocc.length ? Math.round((answered / tocc.length) * 1e4) / 1e4 : 0,
+    questionnaires: new Set(tocc.map((r) => r.questionnaire)).size,
+    therapists: new Set(tocc.map((r) => r.therapist)).size,
+    patients_rated: new Set(tocc.map((r) => r.patient_uuid)).size,
+    patients_total: cov.length,
+    date_min: dates.length ? dates.reduce((a, b) => (b < a ? b : a)) : "",
+    date_max: dates.length ? dates.reduce((a, b) => (b > a ? b : a)) : "",
+    months: rate(tocc, "month").sort((a, b) => (a.month < b.month ? -1 : 1)),
+    by_therapist: rate(tocc, "therapist").sort((a, b) => b.sent - a.sent),
+    by_questionnaire: rate(tocc, "questionnaire").sort((a, b) => b.sent - a.sent),
+    paired: { therapist_days: tKeys.size, also_patient: both },
   };
 }
 
@@ -1726,6 +1823,90 @@ function renderAdherence(){
   t.appendChild(sc); p.appendChild(t);
 }
 
+/* --- therapist-report questionnaires ------------------------------------
+   The therapist's own forms arrive on the patient's export row, so until they
+   are told apart they inflate the patient adherence rate. This screen is the
+   other half of that separation: it shows them on their own terms. */
+function catalogCard(){
+  const cat=S.questionnaire_catalog||[];
+  const t=cat.filter(c=>c.respondent==='therapist').length;
+  const c=C('div',{className:'card'});
+  c.innerHTML=`<h2>אילו שאלונים נחשבים של המטפל</h2>
+    <p class="sub">הסיווג נקבע בקובץ הכללים, לפי קידומת בשם השאלון. ${
+      t?`${NF.format(t)} מתוך ${NF.format(cat.length)} השאלונים סווגו כשאלוני מטפל`
+       :'כרגע אף שאלון לא סווג — כל השאלונים נספרים כהיענות המטופל'}</p>
+    <div class="scroll"><table><thead><tr><th>שאלון</th><th>מי עונה</th><th>נשלחו</th></tr></thead><tbody>${
+      cat.map(c=>`<tr><td>${c.questionnaire}</td><td>${
+        c.respondent==='therapist'?'<span class="badge b-mid">מטפל</span>':'<span class="badge b-ok">מטופל</span>'
+      }</td><td class="mono">${NF.format(c.sent)}</td></tr>`).join('')
+    }</tbody></table></div>`;
+  return c;
+}
+
+/* A threshold that filters everything out must say so, not draw an empty axis
+   with meaningless tick labels. */
+const thin=m=>C('p',{className:'sub',style:'margin:0',textContent:m});
+
+function renderTherapist(){
+  const p=$('#thr'); p.innerHTML='';
+  const T=S.therapist_forms||{sent:0};
+
+  if(!T.sent){
+    p.appendChild(C('div',{className:'card',innerHTML:
+      `<h2>שאלוני מטפל</h2>
+       <p class="sub">עדיין לא סווג אף שאלון כשאלון שהמטפל ממלא, ולכן אין מה להציג כאן.</p>
+       <div class="hint" style="margin:14px 0 0"><b>למה זה משנה.</b> שאלוני המטפל מגיעים באותה שורת ייצוא כמו התשובות של המטופל. כל עוד לא מפרידים ביניהם, טופס שהמטפל מילא נספר כאילו המטופל ענה — ושיעור ההיענות שבמסך הסקירה מודד שני דברים שונים בבת אחת.</p>
+       <ol class="steps" style="margin-top:14px">
+         <li>הסתכל בטבלה שלמטה ומצא את הקידומת המשותפת לשמות של שאלוני המטפל</li>
+         <li>פתח את קובץ הכללים שבתיקיית הארכיון והוסף אותה תחת רשימת הקידומות</li>
+         <li>רענן את הדף — המסך הזה יתמלא, ושיעור ההיענות של המטופלים יתוקן מעצמו</li>
+       </ol>`}));
+    p.appendChild(catalogCard());
+    return;
+  }
+
+  const kp=C('div',{className:'kpis'});
+  const covPct=T.patients_total?T.patients_rated/T.patients_total:0;
+  const pairPct=T.paired.therapist_days?T.paired.also_patient/T.paired.therapist_days:0;
+  [['טפסים שנשלחו',NF.format(T.sent),`${T.questionnaires} סוגים`],
+   ['נענו',NF.format(T.answered),`מתוכם ${NF.format(T.complete)} במלואם`],
+   ['שיעור מילוי',pct(T.rate),'מכלל הטפסים שנשלחו למטפלים'],
+   ['מטופלים שדורגו',NF.format(T.patients_rated),`${pct(covPct)} מכלל המטופלים`],
+   ['מטפלים מדווחים',NF.format(T.therapists),'לפי שיוך המטופל'],
+   ['ימים עם שני הצדדים',pct(pairPct),`${NF.format(T.paired.also_patient)} מתוך ${NF.format(T.paired.therapist_days)} ימי דירוג`],
+  ].forEach(([l,v,n])=>{const c=C('div',{className:'kpi'});
+    c.innerHTML=`<div class="lab">${l}</div><div class="val mono">${v}</div><div class="note">${n}</div>`;kp.appendChild(c);});
+  p.appendChild(kp);
+
+  p.appendChild(C('div',{className:'hint',innerHTML:
+    `<b>הדירוג מיוחס למטפל של המטופל.</b> הייצוא לא מציין מי מילא את הטופס, אלא רק על מי הוא. לכן כל טופס נזקף למנהל המקרה של אותו מטופל, או למשתתף הראשון ברשימה. זה נכון כשהמטפל המטפל הוא זה שמדרג, ולא נכון לטופס שמילא מדריך או ממלא מקום.`}));
+
+  const MIN_N=25, solid=T.months.filter(m=>m.sent>=MIN_N), dropped=T.months.length-solid.length;
+  p.appendChild(box('מילוי שאלוני המטפל לאורך זמן',
+    `חלק הטפסים שנשלחו וגם מולאו, לפי חודש${dropped?`. ${dropped} חודשים עם פחות מ־${MIN_N} טפסים הושמטו כרעש`:''}`,
+    solid.length?lineChart(solid,{x:'month',y:'rate',label:'מילוי',cap:1})
+      :thin(`אין עדיין חודש עם ${MIN_N} טפסים ומעלה, ולכן אין קו מגמה שאפשר לסמוך עליו. הטבלה שלמטה מראה את המספרים כמו שהם.`)));
+
+  const g=C('div',{className:'grid2'});
+  const MIN_T=30, bigTh=T.by_therapist.filter(t=>t.sent>=MIN_T).sort((a,b)=>b.rate-a.rate);
+  g.appendChild(box('מילוי לפי מטפל',`רק מטפלים עם ${MIN_T} טפסים ומעלה, כדי שהשיעור יהיה יציב`,
+    bigTh.length?barChart(bigTh,
+      {cat:'therapist',val:'rate',w:640,sub:d=>`נשלחו ${NF.format(d.sent)} · מולאו ${NF.format(d.answered)}`})
+      :thin(`לאף מטפל אין עדיין ${MIN_T} טפסים, ולכן השוואה ביניהם תהיה רעש. הטבלה שלמטה מראה את כולם.`)));
+  g.appendChild(box('מילוי לפי שאלון','כל שאלוני המטפל',
+    barChart([...T.by_questionnaire].sort((a,b)=>b.rate-a.rate),
+      {cat:'questionnaire',val:'rate',w:640,sub:d=>`נשלחו ${NF.format(d.sent)} · מולאו ${NF.format(d.answered)}`})));
+  p.appendChild(g);
+
+  const tb=C('div',{className:'card'});
+  tb.innerHTML=`<h2>כל המטפלים</h2><p class="sub">כולל מי שיש לו מעט טפסים ולכן לא נכנס לתרשים</p>
+    <div class="scroll"><table><thead><tr><th>מטפל</th><th>נשלחו</th><th>מולאו</th><th>במלואם</th><th>שיעור</th></tr></thead><tbody>${
+      T.by_therapist.map(r=>`<tr><td>${r.therapist}</td><td class="mono">${NF.format(r.sent)}</td><td class="mono">${NF.format(r.answered)}</td><td class="mono">${NF.format(r.complete)}</td><td class="mono">${pct(r.rate)}</td></tr>`).join('')
+    }</tbody></table></div>`;
+  p.appendChild(tb);
+  p.appendChild(catalogCard());
+}
+
 function renderSample(){
   const p=$('#samp'); p.innerHTML='';
   const c=C('div',{className:'card'});
@@ -2147,7 +2328,7 @@ async function boot(){
     return;
   }
   $('#stamp').textContent=`${NF.format(S.kpi.patients)} מטופלים · ${NF.format(S.kpi.occasions)} שאלונים · עודכן עד ${S.kpi.date_max}`;
-  renderOverview(); renderAdherence(); renderSample(); renderPatientPanel(); renderUpdate(); renderDownload(); renderVerify(); renderBadge();
+  renderOverview(); renderAdherence(); renderTherapist(); renderSample(); renderPatientPanel(); renderUpdate(); renderDownload(); renderVerify(); renderBadge();
 }
 document.querySelectorAll('nav button').forEach(b=>b.addEventListener('click',()=>{
   document.querySelectorAll('nav button').forEach(x=>x.classList.remove('on'));

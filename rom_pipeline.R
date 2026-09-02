@@ -284,6 +284,27 @@ normalize_case <- function(meta, cfg) {
   meta
 }
 
+# Who fills a questionnaire in. The source marks the therapist's own forms with
+# a prefix on the questionnaire name, so a prefix list is the rule and the
+# explicit name list is only for exceptions the prefix misses.
+#
+# A plain prefix test on the trimmed name, deliberately: no case folding and no
+# regular expression, so this and the browser build cannot drift apart on an
+# edge case. startsWith is spelled out with substr because R has no such verb
+# that is guaranteed not to reinterpret the pattern.
+respondent_of <- function(q, cfg) {
+  names_ <- trimws(cfg$therapist_questionnaires %||% character(0))
+  pref   <- trimws(cfg$therapist_questionnaire_prefixes %||% character(0))
+  pref   <- pref[nzchar(pref)]
+  t <- trimws(ifelse(is.na(q), "", q))
+  out <- ifelse(t %in% names_, "therapist", "patient")
+  for (p in pref) {
+    hit <- out == "patient" & substr(t, 1, nchar(p)) == p
+    out[hit] <- "therapist"
+  }
+  out
+}
+
 # ------------------------------------------------------- derived summaries
 
 build_item_usage <- function(long, cfg) {
@@ -295,7 +316,9 @@ build_item_usage <- function(long, cfg) {
   n   <- tapply(it$answered, g, length)
   yes <- tapply(it$answered, g, sum)
   sp <- do.call(rbind, strsplit(as_utf8(names(n)), "\r", fixed = TRUE))
-  u <- data.frame(questionnaire = as_utf8(sp[, 1]), field = as_utf8(sp[, 2]),
+  u <- data.frame(questionnaire = as_utf8(sp[, 1]),
+                  respondent = respondent_of(as_utf8(sp[, 1]), cfg),
+                  field = as_utf8(sp[, 2]),
                   occasions_answered_questionnaire = as.integer(n),
                   item_answered = as.integer(yes), stringsAsFactors = FALSE)
   u$response_rate <- round(u$item_answered / u$occasions_answered_questionnaire, 4)
@@ -303,7 +326,7 @@ build_item_usage <- function(long, cfg) {
   u[order(u$questionnaire, u$field, method = "radix"), ]
 }
 
-build_occasions <- function(long, usage) {
+build_occasions <- function(long, usage, cfg) {
   active <- paste(usage$questionnaire[usage$active == 1],
                   usage$field[usage$active == 1], sep = "\r")
   it <- long[grepl("^item[[:space:]]+[0-9]+$", long$field), ]
@@ -321,6 +344,7 @@ build_occasions <- function(long, usage) {
 
   sp <- do.call(rbind, strsplit(as_utf8(names(n_items)), "\r", fixed = TRUE))
   o <- data.frame(patient_uuid = as_utf8(sp[, 1]), questionnaire = as_utf8(sp[, 2]),
+                  respondent = respondent_of(as_utf8(sp[, 2]), cfg),
                   occasion = as.integer(sp[, 3]), date = sp[, 4],
                   n_items = as.integer(n_items), n_answered = as.integer(n_answered),
                   n_blank = as.integer(n_blank), n_not_answered = as.integer(n_not),
@@ -391,22 +415,27 @@ build_coverage <- function(meta, occ, sessions) {
   b$therapist <- th
 
   agg <- function(k, v, f) tapply(v, k, f)
-  pu <- occ$patient_uuid
-  b$n_occasions          <- as.integer(agg(pu, occ$occasion, length)[b$patient_uuid])
-  b$n_questionnaires     <- as.integer(agg(pu, occ$questionnaire,
+  # The patient columns describe the patient's own adherence. A form the
+  # therapist filled in is real data about this patient, but it is not the
+  # patient answering, so it is counted separately rather than folded in.
+  op <- occ[occ$respondent != "therapist", ]
+  ot <- occ[occ$respondent == "therapist", ]
+  pu <- op$patient_uuid
+  b$n_occasions          <- as.integer(agg(pu, op$occasion, length)[b$patient_uuid])
+  b$n_questionnaires     <- as.integer(agg(pu, op$questionnaire,
                                            function(x) length(unique(x)))[b$patient_uuid])
-  b$n_complete_occasions <- as.integer(agg(pu, occ$completeness,
+  b$n_complete_occasions <- as.integer(agg(pu, op$completeness,
                                            function(x) sum(x == "complete"))[b$patient_uuid])
-  b$n_partial_occasions  <- as.integer(agg(pu, occ$completeness,
+  b$n_partial_occasions  <- as.integer(agg(pu, op$completeness,
                                            function(x) sum(x == "partial"))[b$patient_uuid])
-  b$n_empty_occasions    <- as.integer(agg(pu, occ$completeness,
+  b$n_empty_occasions    <- as.integer(agg(pu, op$completeness,
                                            function(x) sum(x == "empty"))[b$patient_uuid])
-  b$n_not_answered_occasions <- as.integer(agg(pu, occ$completeness,
+  b$n_not_answered_occasions <- as.integer(agg(pu, op$completeness,
                                            function(x) sum(x == "not_answered"))[b$patient_uuid])
-  b$n_responded_occasions    <- as.integer(agg(pu, occ$completeness,
+  b$n_responded_occasions    <- as.integer(agg(pu, op$completeness,
                                            function(x) sum(x %in% c("complete","partial")))[b$patient_uuid])
-  b$first_date <- agg(pu, occ$date, min)[b$patient_uuid]
-  b$last_date  <- agg(pu, occ$date, max)[b$patient_uuid]
+  b$first_date <- agg(pu, op$date, min)[b$patient_uuid]
+  b$last_date  <- agg(pu, op$date, max)[b$patient_uuid]
 
   if (!is.null(sessions) && nrow(sessions)) {
     sp <- sessions$patient_uuid
@@ -417,6 +446,17 @@ build_coverage <- function(meta, occ, sessions) {
     b$first_session   <- agg(sp, sessions$date, min)[b$patient_uuid]
     b$last_session    <- agg(sp, sessions$date, max)[b$patient_uuid]
   }
+  tu <- ot$patient_uuid
+  b$n_therapist_occasions      <- as.integer(agg(tu, ot$occasion, length)[b$patient_uuid])
+  b$n_therapist_questionnaires <- as.integer(agg(tu, ot$questionnaire,
+                                           function(x) length(unique(x)))[b$patient_uuid])
+  b$n_therapist_complete       <- as.integer(agg(tu, ot$completeness,
+                                           function(x) sum(x == "complete"))[b$patient_uuid])
+  b$n_therapist_responded      <- as.integer(agg(tu, ot$completeness,
+                                           function(x) sum(x %in% c("complete","partial")))[b$patient_uuid])
+  b$first_therapist_date <- agg(tu, ot$date, min)[b$patient_uuid]
+  b$last_therapist_date  <- agg(tu, ot$date, max)[b$patient_uuid]
+
   for (q in sort(unique(occ$questionnaire))) {
     sub <- occ[occ$questionnaire == q, ]
     cnt <- table(sub$patient_uuid)
@@ -518,15 +558,16 @@ quarantine <- meta[meta$exclude_reason != "", ]
 clean_meta <- meta[meta$exclude_reason == "",
                    setdiff(names(meta), "exclude_reason")]
 clean <- agg[agg$patient_uuid %in% clean_meta$`Patient uuid`, ]
+clean$respondent <- respondent_of(clean$questionnaire, cfg)
 clean$date <- format(clean$date, "%Y-%m-%d")
 clean <- clean[order(clean$patient_uuid, clean$questionnaire, clean$date,
                      clean$field, method = "radix"),
-               c("patient_uuid", "questionnaire", "occasion", "date", "field",
-                 "value", "status", "answered", "instance", "first_seen_file",
-                 "last_seen_file", "n_exports")]
+               c("patient_uuid", "questionnaire", "respondent", "occasion", "date",
+                 "field", "value", "status", "answered", "instance",
+                 "first_seen_file", "last_seen_file", "n_exports")]
 
 usage    <- build_item_usage(clean, cfg)
-occ      <- build_occasions(clean, usage)
+occ      <- build_occasions(clean, usage, cfg)
 sessions <- build_sessions(occ, cfg)
 coverage <- build_coverage(clean_meta, occ, sessions)
 flagged  <- clean_meta[clean_meta$review_flag != "", ]
@@ -561,6 +602,10 @@ prov <- list(
     occasions_empty    = sum(occ$completeness == "empty"),
     occasions_not_answered = sum(occ$completeness == "not_answered"),
     questionnaires_kept = length(unique(clean$questionnaire)),
+    occasions_patient_answered_form = sum(occ$respondent != "therapist"),
+    occasions_therapist_answered_form = sum(occ$respondent == "therapist"),
+    therapist_questionnaire_prefixes =
+      length(cfg$therapist_questionnaire_prefixes %||% character(0)),
     rows_dropped_excluded_questionnaire = n_dropped_q,
     values_changed_between_exports = length(changed),
     date_min = min(clean$date), date_max = max(clean$date)))

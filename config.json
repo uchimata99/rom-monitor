@@ -37,6 +37,10 @@
   "excluded_questionnaires": [
     "Test placeholders"
   ],
+  "_respondent_comment": "Some questionnaires are filled in BY the therapist ABOUT the patient. They arrive on the same export row as the patient's own answers, so unless they are told apart a therapist-rated form is counted as patient adherence and the response rate measures two different things at once. The source marks them with a prefix on the questionnaire name - put that prefix here. Matching is a plain prefix test on the trimmed name: no case folding, no regex, so all pipelines classify identically.",
+  "therapist_questionnaire_prefixes": [],
+  "_respondent_exceptions_comment": "Exact questionnaire names that are therapist-filled but do not carry the prefix. Only for exceptions - the prefix list is the rule.",
+  "therapist_questionnaires": [],
   "normalize_text_case_columns": [
     "Primary Diagnosis",
     "Comorbidities"
