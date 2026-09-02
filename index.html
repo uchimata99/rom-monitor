@@ -1,0 +1,2403 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ניטור שאלונים</title>
+<style>
+:root{
+  color-scheme:light;
+  --bg:#f4f4f2; --surface:#fcfcfb; --line:#e3e2de; --line2:#efeeea;
+  --ink:#0b0b0b; --ink2:#52514e; --ink3:#84837d;
+  --s1:#2a78d6; --s2:#eb6834; --s3:#1baf7a; --s8:#e34948;
+  --seq1:#86b6ef; --seq2:#3987e5; --seq3:#256abf; --seq4:#184f95; --seq5:#0d366b;
+  --good:#1baf7a; --warn:#eda100; --bad:#e34948;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme=light]){
+  color-scheme:dark;
+  --bg:#111110; --surface:#1a1a19; --line:#33332f; --line2:#262623;
+  --ink:#fff; --ink2:#c3c2b7; --ink3:#8d8c84;
+  --s1:#3987e5; --s2:#d95926; --s3:#199e70; --s8:#e66767;
+  --seq1:#184f95; --seq2:#256abf; --seq3:#3987e5; --seq4:#86b6ef; --seq5:#cde2fb;
+}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);
+  font:14px/1.6 "Segoe UI",system-ui,-apple-system,"Noto Sans Hebrew",Arial,sans-serif}
+header{background:var(--surface);border-bottom:1px solid var(--line);padding:14px 22px;
+  display:flex;align-items:center;gap:18px;flex-wrap:wrap;position:sticky;top:0;z-index:20}
+h1{font-size:17px;margin:0;font-weight:650;letter-spacing:-.2px}
+nav{display:flex;gap:4px;flex-wrap:wrap}
+nav button{background:none;border:0;padding:7px 14px;border-radius:8px;cursor:pointer;
+  font:inherit;font-size:13.5px;color:var(--ink2)}
+nav button:hover{background:var(--line2)}
+nav button.on{background:var(--s1);color:#fff;font-weight:600}
+main{padding:22px;max-width:1500px;margin:0 auto}
+.panel{display:none} .panel.on{display:block}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:18px 20px;margin-bottom:16px}
+.card h2{font-size:14px;margin:0 0 2px;font-weight:650}
+.card .sub{font-size:12.5px;color:var(--ink3);margin:0 0 16px}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:16px}
+.kpi{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:14px 16px}
+.kpi .lab{font-size:12px;color:var(--ink3)}
+.kpi .val{font-size:26px;font-weight:660;letter-spacing:-.5px;line-height:1.25;font-variant-numeric:tabular-nums}
+.kpi .note{font-size:11.5px;color:var(--ink3)}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+@media(max-width:1000px){.grid2{grid-template-columns:1fr}}
+svg{display:block;max-width:100%;overflow:visible}
+.chartbox{overflow-x:auto}
+.ax{font-size:11px;fill:var(--ink3)}
+.axl{font-size:11.5px;fill:var(--ink2)}
+.gl{stroke:var(--line2);stroke-width:1}
+table{border-collapse:collapse;width:100%;font-size:13px}
+th,td{padding:7px 10px;text-align:right;border-bottom:1px solid var(--line2);white-space:nowrap}
+th{color:var(--ink3);font-weight:600;font-size:12px;position:sticky;top:0;background:var(--surface)}
+tbody tr:hover{background:var(--line2)}
+.scroll{max-height:460px;overflow:auto;border:1px solid var(--line);border-radius:10px}
+.mono{font-variant-numeric:tabular-nums}
+.filters{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:14px}
+label{display:block;font-size:12px;color:var(--ink2);margin-bottom:5px;font-weight:550}
+input,select{width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:8px;
+  background:var(--bg);color:var(--ink);font:inherit;font-size:13px}
+select[multiple]{height:104px}
+button.act{background:var(--s1);color:#fff;border:0;padding:9px 18px;border-radius:8px;
+  cursor:pointer;font:inherit;font-size:13.5px;font-weight:600}
+button.act:hover{filter:brightness(1.08)}
+button.ghost{background:var(--bg);color:var(--ink2);border:1px solid var(--line)}
+.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:16px}
+.badge{display:inline-block;padding:2px 9px;border-radius:99px;font-size:11.5px;font-weight:600}
+.b-ok{background:color-mix(in srgb,var(--good) 16%,transparent);color:var(--good)}
+.b-mid{background:color-mix(in srgb,var(--warn) 20%,transparent);color:var(--warn)}
+.b-low{background:color-mix(in srgb,var(--bad) 15%,transparent);color:var(--bad)}
+.tip{position:fixed;pointer-events:none;background:var(--surface);border:1px solid var(--line);
+  border-radius:8px;padding:8px 11px;font-size:12.5px;box-shadow:0 6px 22px rgba(0,0,0,.16);
+  opacity:0;transition:opacity .1s;z-index:60;max-width:280px}
+.tip b{font-weight:650}
+.legend{display:flex;gap:6px;align-items:center;font-size:11.5px;color:var(--ink3);margin-top:10px}
+.legend i{width:22px;height:11px;border-radius:2px;display:inline-block}
+.hint{background:color-mix(in srgb,var(--s1) 7%,var(--surface));border:1px solid color-mix(in srgb,var(--s1) 22%,var(--line));
+  border-radius:10px;padding:12px 14px;font-size:13px;color:var(--ink2);margin-bottom:16px}
+.drop{border:2px dashed var(--line);border-radius:12px;padding:34px;text-align:center;color:var(--ink3);cursor:pointer}
+.drop.over{border-color:var(--s1);background:color-mix(in srgb,var(--s1) 6%,transparent)}
+pre{background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:12px;
+  font-size:12px;overflow:auto;max-height:320px;direction:ltr;text-align:left}
+.spin{color:var(--ink3);font-size:13px}
+.vb{display:inline-flex;align-items:center;gap:6px;padding:4px 11px;border-radius:99px;
+  font-size:12px;font-weight:600;cursor:pointer;border:1px solid transparent}
+.vb-ok{background:color-mix(in srgb,var(--good) 14%,transparent);color:var(--good)}
+.vb-bad{background:color-mix(in srgb,var(--bad) 14%,transparent);color:var(--bad)}
+.vb-stale{background:color-mix(in srgb,var(--warn) 18%,transparent);color:var(--warn)}
+.vb-never{background:var(--line2);color:var(--ink3);border-color:var(--line)}
+.steps{counter-reset:st;padding:0;margin:10px 0 0;list-style:none}
+.steps li{counter-increment:st;position:relative;padding-inline-start:30px;margin-bottom:10px;
+  font-size:13px;color:var(--ink2)}
+.steps li::before{content:counter(st);position:absolute;inset-inline-start:0;top:1px;
+  width:20px;height:20px;border-radius:50%;background:var(--line2);color:var(--ink2);
+  font-size:11px;font-weight:700;display:grid;place-items:center}
+</style>
+<style>
+.gate{max-width:620px;margin:8vh auto;padding:0 22px}
+.gate .card{padding:26px 28px}
+.gate h2{font-size:18px;margin:0 0 6px}
+.gate .big{font-size:15px;color:var(--ink2);margin:0 0 20px;line-height:1.7}
+.bar{height:6px;border-radius:99px;background:var(--line2);overflow:hidden;margin:16px 0 8px}
+.bar i{display:block;height:100%;background:var(--s1);width:0;transition:width .25s}
+.muted{font-size:12.5px;color:var(--ink3)}
+</style>
+</head>
+<body>
+<div id="gate" class="gate"></div>
+<div id="app" hidden>
+<header>
+  <h1>ניטור שאלונים</h1>
+  <nav>
+    <button class="on" data-p="over">סקירה</button>
+    <button data-p="adh">היענות</button>
+    <button data-p="samp">בונה מדגם</button>
+    <button data-p="pat">מטופל</button>
+    <button data-p="upd">עדכון</button>
+    <button data-p="dl">הורדה</button>
+    <button data-p="ver">אימות</button>
+  </nav>
+  <span id="vbadge" style="margin-inline-start:auto"></span>
+  <span id="stamp" style="font-size:12px;color:var(--ink3)"></span>
+</header>
+<main>
+  <div id="over" class="panel on"><div class="spin">טוען…</div></div>
+  <div id="adh" class="panel"></div>
+  <div id="samp" class="panel"></div>
+  <div id="pat" class="panel"></div>
+  <div id="upd" class="panel"></div>
+  <div id="dl" class="panel"></div>
+  <div id="ver" class="panel"></div>
+</main>
+<div class="tip" id="tip"></div>
+</div>
+<script>
+/* ===== pipeline ===== */
+/* =========================================================================
+   ROM pipeline - browser implementation.
+
+   A direct translation of merge_rom.py. Same steps, same order, same rules.
+   It runs entirely inside the page: no server, no upload, nothing installed.
+
+   Its output is checked cell-by-cell against the R pipeline, exactly like the
+   Python one, so a translation slip cannot pass silently.
+
+   Works both in the browser and under Node (for the equivalence test).
+   ========================================================================= */
+
+const ST_ANSWERED = "answered";
+const ST_BLANK = "blank";
+const ST_NOT = "not_answered";
+
+const COL_RE = /^(.+?)\s+instance\s+(\d+)\s+(.+)$/;
+const ITEM_RE = /^item\s+\d+$/;
+const DATE_RE = /^(\d{2})\/(\d{2})\/(\d{4})$/;
+
+const FIELD_HE = {
+  "Notes": "הערות", "Intake Summary": "סיכום אינטייק",
+  "Case Manager": "מנהל מקרה", "Collaborators": "משתתפים",
+};
+
+const META_COLS = [
+  "Patient uuid", "Clinic Name", "Gender", "Comorbidities", "Collaborators",
+  "Age", "Case Manager", "Intake Summary", "Intake Date", "Notes",
+  "Primary Diagnosis", "Treatment Start", "Medication",
+];
+
+/* ------------------------------------------------------------------ csv */
+
+function parseCSV(text) {
+  if (text.charCodeAt(0) === 0xfeff) text = text.slice(1);   // strip BOM
+  const rows = [];
+  let row = [], field = "", q = false;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (q) {
+      if (c === '"') {
+        if (text[i + 1] === '"') { field += '"'; i++; }
+        else q = false;
+      } else field += c;
+    } else if (c === '"') q = true;
+    else if (c === ",") { row.push(field); field = ""; }
+    else if (c === "\n") { row.push(field); rows.push(row); row = []; field = ""; }
+    else if (c === "\r") { /* handled with \n */ }
+    else field += c;
+  }
+  if (field !== "" || row.length) { row.push(field); rows.push(row); }
+  return rows;
+}
+
+function toCSV(columns, rows) {
+  const esc = (v) => {
+    const s = v === null || v === undefined ? "" : String(v);
+    return /[",\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+  };
+  const out = [columns.map(esc).join(",")];
+  for (const r of rows) out.push(columns.map((c) => esc(fmt(r[c]))).join(","));
+  return "﻿" + out.join("\n") + "\n";
+}
+
+/* ------------------------------------------------------------------- zip
+
+   The output tables leave the page as one file. A store-only (uncompressed)
+   archive is a few dozen lines and needs no library, which is the point: the
+   page has to keep working from a folder on disk with no network at all, so
+   it cannot pull a compression library from anywhere.
+*/
+const CRC_TABLE = (() => {
+  const t = new Uint32Array(256);
+  for (let n = 0; n < 256; n++) {
+    let c = n;
+    for (let k = 0; k < 8; k++) c = (c & 1) ? (0xedb88320 ^ (c >>> 1)) : (c >>> 1);
+    t[n] = c >>> 0;
+  }
+  return t;
+})();
+
+function crc32(buf) {
+  let c = 0xffffffff;
+  for (let i = 0; i < buf.length; i++) c = CRC_TABLE[(c ^ buf[i]) & 0xff] ^ (c >>> 8);
+  return (c ^ 0xffffffff) >>> 0;
+}
+
+/** {name: text} -> Blob holding a zip archive of those files. */
+function zipStore(entries) {
+  const enc = new TextEncoder();
+  const u16 = (v) => [v & 0xff, (v >>> 8) & 0xff];
+  const u32 = (v) => [v & 0xff, (v >>> 8) & 0xff, (v >>> 16) & 0xff, (v >>> 24) & 0xff];
+
+  // One timestamp for the whole archive, in the MS-DOS fields zip still uses.
+  const d = new Date();
+  const time = ((d.getHours() << 11) | (d.getMinutes() << 5) | (d.getSeconds() >> 1)) & 0xffff;
+  const date = (((d.getFullYear() - 1980) << 9) | ((d.getMonth() + 1) << 5) | d.getDate()) & 0xffff;
+
+  const local = [], central = [];
+  let offset = 0, count = 0, cdSize = 0;
+
+  for (const [name, text] of Object.entries(entries)) {
+    const nm = enc.encode(name), data = enc.encode(text), crc = crc32(data);
+    // Flag bit 11 declares the name UTF-8, so a Hebrew file name survives.
+    const head = [...u16(20), ...u16(0x0800), ...u16(0), ...u16(time), ...u16(date),
+                  ...u32(crc), ...u32(data.length), ...u32(data.length),
+                  ...u16(nm.length), ...u16(0)];
+    const lh = new Uint8Array([0x50, 0x4b, 0x03, 0x04, ...head]);
+    local.push(lh, nm, data);
+    const ch = new Uint8Array([0x50, 0x4b, 0x01, 0x02, ...u16(20), ...head,
+                               ...u16(0), ...u16(0), ...u16(0), ...u32(0), ...u32(offset)]);
+    central.push(ch, nm);
+    offset += lh.length + nm.length + data.length;
+    cdSize += ch.length + nm.length;
+    count++;
+  }
+  const eocd = new Uint8Array([0x50, 0x4b, 0x05, 0x06, ...u16(0), ...u16(0),
+                               ...u16(count), ...u16(count),
+                               ...u32(cdSize), ...u32(offset), ...u16(0)]);
+  return new Blob([...local, ...central, eocd], { type: "application/zip" });
+}
+
+/* What the download panel lists, in the order it lists them. */
+const TABLE_INFO = [
+  ["master_long.csv", "שורה לכל פריט בכל מדידה — המסד המלא"],
+  ["master_patients.csv", "שורה לכל מטופל שנשאר בנתונים"],
+  ["occasions.csv", "שורה לכל שאלון שנשלח, עם מידת השלמות שלו"],
+  ["sessions.csv", "שורה לכל מפגש, ומה הושלם בו מהמארז השבועי"],
+  ["coverage_by_patient.csv", "סיכום לכל מטופל — כמה נשלח, כמה נענה, ומתי"],
+  ["item_usage.csv", "שיעור המענה לכל פריט, ומי מהם נחשב פעיל"],
+  ["value_changes.csv", "ערכים שהשתנו בין הורדה להורדה"],
+  ["quarantine.csv", "מי הוחרג, ומאיזו סיבה"],
+  ["review_needed.csv", "מי סומן לבדיקה ונשאר בנתונים"],
+  ["provenance.json", "מה בדיוק ייצר את התוצרים האלה — קבצי המקור, הכללים והספירות"],
+];
+
+/* Mirror of the Python `fmt`: integral floats print without a decimal point,
+   so both sides write "9" rather than one writing "9.0". */
+function fmt(v) {
+  if (v === null || v === undefined) return "";
+  if (typeof v === "boolean") return v ? "1" : "0";
+  if (typeof v === "number") {
+    if (!Number.isFinite(v)) return "";
+    return Number.isInteger(v) ? String(v) : String(v);
+  }
+  return String(v);
+}
+
+/* Round half away from zero would drift from Python; Python and R both round
+   half to even. Emulate that so the third decimal never disagrees. */
+function roundHalfEven(x, digits) {
+  const f = Math.pow(10, digits);
+  const y = x * f;
+  const r = Math.round(y);
+  if (Math.abs(y - Math.trunc(y) ) === 0.5 || Math.abs(Math.abs(y % 1) - 0.5) < 1e-9) {
+    const down = Math.floor(y), up = Math.ceil(y);
+    return (down % 2 === 0 ? down : up) / f;
+  }
+  return r / f;
+}
+
+/* ------------------------------------------------------------ io helpers */
+
+function isoDate(s) {
+  const m = DATE_RE.exec((s || "").trim());
+  if (!m) return null;
+  const y = +m[3], mo = +m[2], d = +m[1];
+  const dt = new Date(Date.UTC(y, mo - 1, d));
+  if (dt.getUTCFullYear() !== y || dt.getUTCMonth() !== mo - 1 ||
+      dt.getUTCDate() !== d) return null;
+  return `${String(y).padStart(4, "0")}-${String(mo).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+}
+
+/** Chronological order of exports: timestamp in the filename, else mtime. */
+function fileSortKey(name, mtime) {
+  const m = /(\d{8})[_-]?(\d{4})?/.exec(name);
+  if (m) {
+    const stamp = m[1] + (m[2] || "0000");
+    const y = +stamp.slice(0, 4), mo = +stamp.slice(4, 6), d = +stamp.slice(6, 8);
+    const hh = +stamp.slice(8, 10), mi = +stamp.slice(10, 12);
+    const t = Date.UTC(y, mo - 1, d, hh, mi);
+    if (Number.isFinite(t)) return [0, t, name];
+  }
+  return [1, mtime || 0, name];
+}
+
+function sortFiles(files) {
+  return files.slice().sort((a, b) => {
+    const ka = fileSortKey(a.name, a.mtime), kb = fileSortKey(b.name, b.mtime);
+    for (let i = 0; i < 3; i++) {
+      if (ka[i] < kb[i]) return -1;
+      if (ka[i] > kb[i]) return 1;
+    }
+    return 0;
+  });
+}
+
+/* ---------------------------------------------------------------- reshape */
+
+function wideToLong(header, rows, source) {
+  const dateCol = new Map(), fieldsOf = new Map();
+  header.forEach((c, j) => {
+    const m = COL_RE.exec(c);
+    if (!m) return;
+    const q = m[1].trim(), i = parseInt(m[2], 10), f = m[3].trim();
+    const k = q + "\r" + i;
+    if (f === "Date") dateCol.set(k, { q, i, j });
+    else {
+      if (!fieldsOf.has(k)) fieldsOf.set(k, []);
+      fieldsOf.get(k).push([j, f]);
+    }
+  });
+
+  const uuidJ = header.indexOf("Patient uuid");
+  const out = [];
+  for (const row of rows) {
+    const pu = row[uuidJ];
+    for (const [k, { q, i, j }] of dateCol) {
+      const iso = j < row.length ? isoDate(row[j]) : null;
+      if (iso === null) continue;
+      for (const [fj, f] of fieldsOf.get(k) || []) {
+        const raw = fj < row.length ? (row[fj] || "").trim() : "";
+        out.push([pu, q, i, iso, f, raw, source]);
+      }
+    }
+  }
+  return out;
+}
+
+/** Stable occasion number: rank a patient's instances of a questionnaire by
+    date, so the key survives renumbering between exports. */
+function numberOccasions(longRows) {
+  const seen = new Map();
+  for (const [pu, q, i, iso] of longRows) {
+    const k = pu + "\r" + q;
+    if (!seen.has(k)) seen.set(k, new Map());
+    seen.get(k).set(iso + "\r" + i, [iso, i]);
+  }
+  const occ = new Map();
+  for (const [k, m] of seen) {
+    const [pu, q] = k.split("\r");
+    const list = [...m.values()].sort((a, b) =>
+      a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : a[1] - b[1]);
+    list.forEach(([iso, i], n) => occ.set(`${pu}\r${q}\r${i}\r${iso}`, n + 1));
+  }
+  return occ;
+}
+
+/* --------------------------------------------------------------- cleaning */
+
+function textHits(metaRows, cfg, patterns) {
+  const out = new Array(metaRows.length).fill("");
+  if (!patterns || !patterns.length) return out;
+  const pats = patterns.map((p) => new RegExp(p, "i"));
+  for (const col of cfg.test_text_fields || []) {
+    const lab = FIELD_HE[col] || col;
+    metaRows.forEach((m, k) => {
+      if (out[k]) return;
+      const v = (m[col] || "").trim();
+      if (v && pats.some((p) => p.test(v))) out[k] = `טקסט מציין מקום בשדה ${lab}`;
+    });
+  }
+  return out;
+}
+
+/** Two tiers: exclude_reason (removed) and review_flag (kept, but marked).
+    The safety guard is the important part: a patient carrying real longitudinal
+    data is never silently deleted by a heuristic - it downgrades to a flag. */
+function flagTestPatients(metaRows, cfg, occCount) {
+  const guard = parseInt(cfg.never_exclude_above_occasions || 0, 10) || 0;
+  const manEx = new Set(cfg.manual_exclude_uuids || []);
+  const manKeep = new Set(cfg.manual_keep_uuids || []);
+  const staff = (cfg.test_staff_names || []).map((s) => s.toLowerCase());
+
+  const excl = textHits(metaRows, cfg, cfg.test_text_patterns_exclude);
+  metaRows.forEach((m, k) => {
+    if (!excl[k] && staff.length) {
+      const joined = ((m["Case Manager"] || "") + " | " +
+                      (m["Collaborators"] || "")).toLowerCase();
+      if (staff.some((s) => joined.includes(s))) excl[k] = "חשבון בדיקה של הצוות";
+    }
+    if (!excl[k] && manEx.has(m["Patient uuid"])) excl[k] = "הוחרג ידנית";
+  });
+
+  const rev = textHits(metaRows, cfg, cfg.test_text_patterns_review);
+  metaRows.forEach((m, k) => {
+    if (rev[k]) return;
+    const age = parseFloat(m["Age"]);
+    if (!Number.isFinite(age)) return;
+    if (age < cfg.min_plausible_age || age > cfg.max_plausible_age)
+      rev[k] = "גיל לא סביר";
+  });
+
+  metaRows.forEach((m, k) => {
+    const n = occCount.get(m["Patient uuid"]) || 0;
+    if (guard && excl[k] && n >= guard && !manEx.has(m["Patient uuid"])) {
+      rev[k] = `נשמר על ידי שומר הבטיחות — ${excl[k]}, אך יש לו ${n} מדידות`;
+      excl[k] = "";
+    }
+    if (manKeep.has(m["Patient uuid"])) excl[k] = "";
+    m.exclude_reason = excl[k];
+    m.review_flag = rev[k];
+    m.n_occasions = n;
+  });
+  return metaRows;
+}
+
+/** Collapse case-only duplicates. Most frequent spelling wins; ties broken
+    alphabetically so the result never depends on row order. */
+function normalizeCase(metaRows, cfg) {
+  for (const col of cfg.normalize_text_case_columns || []) {
+    const counts = new Map();
+    for (const m of metaRows) {
+      const v = (m[col] || "").trim();
+      if (v) counts.set(v, (counts.get(v) || 0) + 1);
+    }
+    const order = [...counts.keys()].sort((a, b) =>
+      (counts.get(b) - counts.get(a)) || (a < b ? -1 : a > b ? 1 : 0));
+    const canon = new Map();
+    for (const val of order) {
+      const k = val.trim().toLowerCase();
+      if (!canon.has(k)) canon.set(k, val);
+    }
+    for (const m of metaRows) {
+      const v = (m[col] || "").trim();
+      if (v) m[col] = canon.get(v.toLowerCase()) ?? v;
+    }
+  }
+  return metaRows;
+}
+
+/* ----------------------------------------------------- derived summaries */
+
+function buildItemUsage(clean, cfg) {
+  const answeredOcc = new Set();
+  for (const r of clean)
+    if (r.status === ST_ANSWERED && ITEM_RE.test(r.field))
+      answeredOcc.add(`${r.patient_uuid}\r${r.questionnaire}\r${r.occasion}`);
+
+  const tot = new Map(), yes = new Map();
+  for (const r of clean) {
+    if (!ITEM_RE.test(r.field)) continue;
+    if (!answeredOcc.has(`${r.patient_uuid}\r${r.questionnaire}\r${r.occasion}`)) continue;
+    const k = r.questionnaire + "\r" + r.field;
+    tot.set(k, (tot.get(k) || 0) + 1);
+    yes.set(k, (yes.get(k) || 0) + (r.status === ST_ANSWERED ? 1 : 0));
+  }
+  const thr = parseFloat(cfg.active_item_min_response_rate ?? 0.05);
+  return [...tot.keys()].sort().map((k) => {
+    const [questionnaire, field] = k.split("\r");
+    const rate = roundHalfEven(yes.get(k) / tot.get(k), 4);
+    return {
+      questionnaire, field,
+      occasions_answered_questionnaire: tot.get(k),
+      item_answered: yes.get(k),
+      response_rate: rate,
+      active: rate >= thr ? 1 : 0,
+    };
+  });
+}
+
+function buildOccasions(clean, usage) {
+  const active = new Set(usage.filter((u) => u.active === 1)
+                              .map((u) => u.questionnaire + "\r" + u.field));
+  const agg = new Map();
+  for (const r of clean) {
+    if (!ITEM_RE.test(r.field)) continue;
+    const k = `${r.patient_uuid}\r${r.questionnaire}\r${r.occasion}\r${r.date}`;
+    let a = agg.get(k);
+    if (!a) {
+      a = { n_items: 0, n_answered: 0, n_blank: 0, n_not_answered: 0,
+            n_active_items: 0, n_active_answered: 0 };
+      agg.set(k, a);
+    }
+    a.n_items++;
+    if (r.status === ST_ANSWERED) a.n_answered++;
+    else if (r.status === ST_BLANK) a.n_blank++;
+    else a.n_not_answered++;
+    if (active.has(r.questionnaire + "\r" + r.field)) {
+      a.n_active_items++;
+      if (r.status === ST_ANSWERED) a.n_active_answered++;
+    }
+  }
+
+  const totals = new Map();
+  for (const r of clean)
+    if (r.field === "total score")
+      totals.set(`${r.patient_uuid}\r${r.questionnaire}\r${r.occasion}`, r.value);
+
+  const out = [];
+  for (const [k, a] of agg) {
+    const [pu, q, occS, d] = k.split("\r");
+    a.n_missing = a.n_active_items - a.n_active_answered;
+    const comp = a.n_not_answered === a.n_items ? "not_answered"
+               : a.n_answered === 0 ? "empty"
+               : a.n_missing <= 0 ? "complete" : "partial";
+    const ts = totals.get(`${pu}\r${q}\r${occS}`);
+    const tsNum = ts === undefined || ts === "" ? null : Number(ts);
+    out.push({
+      patient_uuid: pu, questionnaire: q, occasion: +occS, date: d, ...a,
+      completeness: comp,
+      pct_answered: a.n_active_items
+        ? roundHalfEven(a.n_active_answered / a.n_active_items, 3) : null,
+      total_score: Number.isFinite(tsNum) ? tsNum : null,
+    });
+  }
+  out.sort((x, y) => cmp3(x.patient_uuid, y.patient_uuid) ||
+                     cmp3(x.questionnaire, y.questionnaire) ||
+                     cmp3(x.date, y.date));
+  return out;
+}
+
+const cmp3 = (a, b) => (a < b ? -1 : a > b ? 1 : 0);
+
+const RANK = { not_answered: 0, empty: 1, partial: 2, complete: 3 };
+const UNRANK = ["not_answered", "empty", "partial", "complete"];
+
+/** A questionnaire can legitimately appear twice on one date. Ranking the
+    states and taking the best is deterministic, and answers the question the
+    session table is asking: was the battery completed that day? */
+function buildSessions(occ, cfg) {
+  const weekly = cfg.weekly_questionnaires || [];
+  const required = cfg.required_for_complete_week || weekly;
+  if (!weekly.length) return [];
+  const wset = new Set(weekly);
+  const best = new Map();
+  for (const r of occ) {
+    if (!wset.has(r.questionnaire)) continue;
+    const k = r.patient_uuid + "\r" + r.date;
+    if (!best.has(k)) best.set(k, new Map());
+    const m = best.get(k);
+    m.set(r.questionnaire,
+          Math.max(m.get(r.questionnaire) ?? -1, RANK[r.completeness]));
+  }
+  if (!best.size) return [];
+
+  const req = required.filter((q) => wset.has(q));
+  const rows = [...best.keys()].sort((a, b) => {
+    const [pa, da] = a.split("\r"), [pb, db] = b.split("\r");
+    return cmp3(pa, pb) || cmp3(da, db);
+  }).map((k) => {
+    const [pu, d] = k.split("\r");
+    const m = best.get(k);
+    const row = { patient_uuid: pu, date: d };
+    for (const q of weekly) {
+      const v = m.get(q);
+      row[q] = v === undefined || v < 0 ? "missing" : UNRANK[v];
+    }
+    row.n_present = weekly.filter((q) => row[q] !== "missing").length;
+    row.n_complete = weekly.filter((q) => row[q] === "complete").length;
+    row.week_complete = req.every((q) => row[q] === "complete") ? 1 : 0;
+    row.week_present = req.every((q) => row[q] !== "missing") ? 1 : 0;
+    return row;
+  });
+
+  const idx = new Map();
+  for (const r of rows) {
+    idx.set(r.patient_uuid, (idx.get(r.patient_uuid) || 0) + 1);
+    r.session_index = idx.get(r.patient_uuid);
+    r.iso_week = isoWeek(r.date);
+  }
+  return rows;
+}
+
+function isoWeek(iso) {
+  const [y, m, d] = iso.split("-").map(Number);
+  const dt = new Date(Date.UTC(y, m - 1, d));
+  const day = (dt.getUTCDay() + 6) % 7;               // Mon = 0
+  dt.setUTCDate(dt.getUTCDate() - day + 3);           // nearest Thursday
+  const year = dt.getUTCFullYear();
+  const jan4 = new Date(Date.UTC(year, 0, 4));
+  const week = 1 + Math.round(((dt - jan4) / 86400000 -
+                               3 + ((jan4.getUTCDay() + 6) % 7)) / 7);
+  return `${year}-W${String(week).padStart(2, "0")}`;
+}
+
+function buildCoverage(cleanMeta, occ, sessions) {
+  const byPat = new Map(), sesByPat = new Map();
+  for (const r of occ) {
+    if (!byPat.has(r.patient_uuid)) byPat.set(r.patient_uuid, []);
+    byPat.get(r.patient_uuid).push(r);
+  }
+  for (const r of sessions) {
+    if (!sesByPat.has(r.patient_uuid)) sesByPat.set(r.patient_uuid, []);
+    sesByPat.get(r.patient_uuid).push(r);
+  }
+  const questionnaires = [...new Set(occ.map((r) => r.questionnaire))].sort();
+
+  const rows = cleanMeta.map((m) => {
+    const pu = m["Patient uuid"];
+    let th = (m["Case Manager"] || "").trim();
+    if (!th) th = ((m["Collaborators"] || "").split(",")[0] || "").trim();
+    if (!th) th = "ללא שיוך";
+
+    const o = byPat.get(pu) || [];
+    const comp = o.map((r) => r.completeness);
+    const count = (v) => comp.filter((c) => c === v).length;
+    const r = {
+      patient_uuid: pu, Gender: m["Gender"], Age: m["Age"],
+      "Primary Diagnosis": m["Primary Diagnosis"],
+      "Case Manager": m["Case Manager"], Collaborators: m["Collaborators"],
+      "Intake Date": m["Intake Date"], "Treatment Start": m["Treatment Start"],
+      therapist: th,
+      n_occasions: o.length,
+      n_questionnaires: new Set(o.map((x) => x.questionnaire)).size,
+      n_complete_occasions: count("complete"),
+      n_partial_occasions: count("partial"),
+      n_empty_occasions: count("empty"),
+      n_not_answered_occasions: count("not_answered"),
+      n_responded_occasions: count("complete") + count("partial"),
+      first_date: o.length ? o.reduce((a, x) => (x.date < a ? x.date : a), o[0].date) : null,
+      last_date: o.length ? o.reduce((a, x) => (x.date > a ? x.date : a), o[0].date) : null,
+    };
+    const s = sesByPat.get(pu) || [];
+    r.n_sessions = new Set(s.map((x) => x.date)).size;
+    r.n_weeks_present = s.reduce((a, x) => a + x.week_present, 0);
+    r.n_weeks_complete = s.reduce((a, x) => a + x.week_complete, 0);
+    r.first_session = s.length ? s.reduce((a, x) => (x.date < a ? x.date : a), s[0].date) : null;
+    r.last_session = s.length ? s.reduce((a, x) => (x.date > a ? x.date : a), s[0].date) : null;
+
+    const counts = new Map();
+    for (const x of o) counts.set(x.questionnaire, (counts.get(x.questionnaire) || 0) + 1);
+    for (const q of questionnaires) r["n::" + q] = counts.get(q) || 0;
+    return r;
+  });
+  return { rows, questionnaires };
+}
+
+/* ------------------------------------------------------------------ main */
+
+/**
+ * files: [{name, text, mtime}] - every export ever downloaded.
+ * cfg:   the same config.json both other pipelines read.
+ */
+function runPipeline(files, cfg, onProgress = () => {}) {
+  const nat = new Set(cfg.not_answered_tokens || ["N/A"]);
+  const ordered = sortFiles(files);
+
+  const allLong = [];
+  const metaByPat = new Map();
+  ordered.forEach((f, order) => {
+    onProgress(`קורא ${f.name}`, order / ordered.length);
+    const table = parseCSV(f.text);
+    let header = table[0] || [];
+    header = header.map((h) => h.replace(/^﻿/, ""));
+    const rows = table.slice(1).filter((r) => r.some((c) => (c || "").trim() !== ""));
+
+    const lg = wideToLong(header, rows, f.name);
+    const occMap = numberOccasions(lg);
+    for (const rec of lg) {
+      rec.push(occMap.get(`${rec[0]}\r${rec[1]}\r${rec[2]}\r${rec[3]}`));
+      rec.push(order);
+      allLong.push(rec);
+    }
+
+    const idx = new Map(header.map((c, j) => [c, j]));
+    for (const row of rows) {
+      const m = {};
+      for (const c of META_COLS) {
+        const j = idx.get(c);
+        const v = j !== undefined && j < row.length ? (row[j] || "").trim() : "";
+        m[c] = v === "" || nat.has(v) ? null : v;
+      }
+      m.source_file = f.name;
+      metaByPat.set(m["Patient uuid"], m);       // newest export wins
+    }
+  });
+
+  onProgress("ממזג", 0.6);
+
+  // history: same measurement, different value between exports
+  const seen = new Map();
+  for (const [pu, q, inst, d, f, raw, src, occ, order] of allLong) {
+    const st = nat.has(raw) ? ST_NOT : raw === "" ? ST_BLANK : ST_ANSWERED;
+    const val = st === ST_ANSWERED ? raw : "";
+    const k = `${pu}\r${q}\r${occ}\r${d}\r${f}`;
+    if (!seen.has(k)) seen.set(k, []);
+    seen.get(k).push([order, src, val, st, inst]);
+  }
+
+  const changes = [], agg = [];
+  for (const [k, lst] of seen) {
+    lst.sort((a, b) => a[0] - b[0]);
+    const [pu, q, occ, d, f] = k.split("\r");
+    if (new Set(lst.map((t) => t[2] + "" + t[3])).size > 1)
+      for (const [, src, v, s] of lst)
+        changes.push({ patient_uuid: pu, questionnaire: q, occasion: +occ,
+                       date: d, field: f, source_file: src, value: v, status: s });
+    const last = lst[lst.length - 1];
+    agg.push({
+      patient_uuid: pu, questionnaire: q, occasion: +occ, date: d, field: f,
+      value: last[2], status: last[3],
+      answered: last[3] === ST_ANSWERED ? 1 : 0,
+      instance: last[4], first_seen_file: lst[0][1], last_seen_file: last[1],
+      n_exports: new Set(lst.map((t) => t[1])).size,
+    });
+  }
+  changes.sort((a, b) =>
+    cmp3(a.patient_uuid, b.patient_uuid) || cmp3(a.questionnaire, b.questionnaire) ||
+    (a.occasion - b.occasion) || cmp3(a.date, b.date) || cmp3(a.field, b.field) ||
+    cmp3(a.source_file, b.source_file));
+
+  const exclQ = new Set(cfg.excluded_questionnaires || []);
+  const nDroppedQ = agg.filter((r) => exclQ.has(r.questionnaire)).length;
+  const kept = agg.filter((r) => !exclQ.has(r.questionnaire));
+
+  const occSeen = new Set(), occCount = new Map();
+  for (const r of kept) {
+    const k = `${r.patient_uuid}\r${r.questionnaire}\r${r.occasion}`;
+    if (!occSeen.has(k)) {
+      occSeen.add(k);
+      occCount.set(r.patient_uuid, (occCount.get(r.patient_uuid) || 0) + 1);
+    }
+  }
+
+  onProgress("מנקה", 0.75);
+  let metaRows = [...metaByPat.keys()].sort().map((k) => metaByPat.get(k));
+  metaRows = normalizeCase(metaRows, cfg);
+  metaRows = flagTestPatients(metaRows, cfg, occCount);
+
+  if (cfg.drop_patients_with_no_questionnaires !== false) {
+    const have = new Set(kept.map((r) => r.patient_uuid));
+    for (const m of metaRows)
+      if (!m.exclude_reason && !have.has(m["Patient uuid"]))
+        m.exclude_reason = "אין נתוני שאלונים";
+  }
+
+  const quarantine = metaRows.filter((m) => m.exclude_reason);
+  const cleanMeta = metaRows.filter((m) => !m.exclude_reason);
+  const keepIds = new Set(cleanMeta.map((m) => m["Patient uuid"]));
+  const clean = kept.filter((r) => keepIds.has(r.patient_uuid));
+  clean.sort((a, b) =>
+    cmp3(a.patient_uuid, b.patient_uuid) || cmp3(a.questionnaire, b.questionnaire) ||
+    cmp3(a.date, b.date) || cmp3(a.field, b.field));
+
+  onProgress("מחשב טבלאות", 0.85);
+  const usage = buildItemUsage(clean, cfg);
+  const occ = buildOccasions(clean, usage);
+  const sessions = buildSessions(occ, cfg);
+  const { rows: coverage, questionnaires } = buildCoverage(cleanMeta, occ, sessions);
+  const flagged = cleanMeta.filter((m) => m.review_flag);
+
+  const summary = {
+    files: ordered.length,
+    patients_total: metaRows.length,
+    patients_kept: cleanMeta.length,
+    patients_quarantined: quarantine.length,
+    patients_flagged_for_review: flagged.length,
+    inactive_items_detected: usage.filter((u) => u.active === 0).length,
+    rows_kept: clean.length,
+    rows_with_value: clean.reduce((a, r) => a + r.answered, 0),
+    rows_blank_item_on_answered_form: clean.filter((r) => r.status === ST_BLANK).length,
+    rows_form_never_answered: clean.filter((r) => r.status === ST_NOT).length,
+    occasions_kept: occ.length,
+    occasions_complete: occ.filter((r) => r.completeness === "complete").length,
+    occasions_partial: occ.filter((r) => r.completeness === "partial").length,
+    occasions_empty: occ.filter((r) => r.completeness === "empty").length,
+    occasions_not_answered: occ.filter((r) => r.completeness === "not_answered").length,
+    questionnaires_kept: new Set(clean.map((r) => r.questionnaire)).size,
+    rows_dropped_excluded_questionnaire: nDroppedQ,
+    values_changed_between_exports:
+      new Set(changes.map((c) => `${c.patient_uuid}\r${c.questionnaire}\r${c.occasion}\r${c.date}\r${c.field}`)).size,
+    date_min: clean.length ? clean.reduce((a, r) => (r.date < a ? r.date : a), clean[0].date) : "",
+    date_max: clean.length ? clean.reduce((a, r) => (r.date > a ? r.date : a), clean[0].date) : "",
+  };
+
+  onProgress("מוכן", 1);
+  return { clean, cleanMeta, quarantine, flagged, occ, sessions, coverage,
+           usage, changes, questionnaires, summary,
+           weekly: cfg.weekly_questionnaires || [] };
+}
+
+/* The same column lists the other two pipelines write, so the outputs can be
+   compared file for file. */
+const COLUMNS = {
+  master_long: ["patient_uuid", "questionnaire", "occasion", "date", "field",
+                "value", "status", "answered", "instance", "first_seen_file",
+                "last_seen_file", "n_exports"],
+  occasions: ["patient_uuid", "questionnaire", "occasion", "date", "n_items",
+              "n_answered", "n_blank", "n_not_answered", "n_active_items",
+              "n_active_answered", "n_missing", "completeness", "pct_answered",
+              "total_score"],
+  item_usage: ["questionnaire", "field", "occasions_answered_questionnaire",
+               "item_answered", "response_rate", "active"],
+  value_changes: ["patient_uuid", "questionnaire", "occasion", "date", "field",
+                  "source_file", "value", "status"],
+  meta: [...META_COLS, "source_file", "review_flag", "n_occasions"],
+  coverage: ["patient_uuid", "Gender", "Age", "Primary Diagnosis",
+             "Case Manager", "Collaborators", "Intake Date", "Treatment Start",
+             "therapist", "n_occasions", "n_questionnaires",
+             "n_complete_occasions", "n_partial_occasions", "n_empty_occasions",
+             "n_not_answered_occasions", "n_responded_occasions",
+             "first_date", "last_date", "n_sessions", "n_weeks_present",
+             "n_weeks_complete", "first_session", "last_session"],
+};
+
+function exportTables(res) {
+  return {
+    "master_long.csv": toCSV(COLUMNS.master_long, res.clean),
+    "master_patients.csv": toCSV(COLUMNS.meta, res.cleanMeta),
+    "quarantine.csv": toCSV([...COLUMNS.meta, "exclude_reason"], res.quarantine),
+    "review_needed.csv": toCSV(COLUMNS.meta, res.flagged),
+    "occasions.csv": toCSV(COLUMNS.occasions, res.occ),
+    "item_usage.csv": toCSV(COLUMNS.item_usage, res.usage),
+    "value_changes.csv": toCSV(COLUMNS.value_changes, res.changes),
+    "sessions.csv": toCSV(["patient_uuid", "date", ...res.weekly, "n_present",
+                           "n_complete", "week_complete", "week_present",
+                           "session_index", "iso_week"], res.sessions),
+    "coverage_by_patient.csv": toCSV(
+      [...COLUMNS.coverage, ...res.questionnaires.map((q) => "n::" + q)],
+      res.coverage),
+  };
+}
+
+/* ===== data layer ===== */
+/* =========================================================================
+   Data layer for the browser build.
+
+   The screens in ui.html were written against a small HTTP API. Rather than
+   rewrite them, this file answers exactly the same calls locally: `fetch2`
+   has the shape of `fetch`, so the UI code is carried over unchanged and
+   cannot drift from the version that was already working.
+
+   Nothing here talks to a network. The archive is read straight off the disk
+   through the browser's folder-access permission, and every table is computed
+   in the page.
+   ========================================================================= */
+
+const DB = {
+  res: null,          // full pipeline result (only while it is needed)
+  light: null,        // the tables the screens use - cached between visits
+  cfg: null,
+  cfgSource: "",
+  dir: null,          // FileSystemDirectoryHandle for the archive
+  files: [],          // [{name, size, mtime, handle}]
+  fingerprint: "",
+  verifyState: {},
+};
+
+/* ------------------------------------------------------- persistent store */
+
+const IDB_NAME = "rom", IDB_VER = 1;
+
+function idb() {
+  return new Promise((res, rej) => {
+    const r = indexedDB.open(IDB_NAME, IDB_VER);
+    r.onupgradeneeded = () => {
+      const d = r.result;
+      if (!d.objectStoreNames.contains("kv")) d.createObjectStore("kv");
+    };
+    r.onsuccess = () => res(r.result);
+    r.onerror = () => rej(r.error);
+  });
+}
+
+async function kvGet(k) {
+  const d = await idb();
+  return new Promise((res, rej) => {
+    const t = d.transaction("kv", "readonly").objectStore("kv").get(k);
+    t.onsuccess = () => res(t.result);
+    t.onerror = () => rej(t.error);
+  });
+}
+
+async function kvPut(k, v) {
+  const d = await idb();
+  return new Promise((res, rej) => {
+    const t = d.transaction("kv", "readwrite").objectStore("kv").put(v, k);
+    t.onsuccess = () => res();
+    t.onerror = () => rej(t.error);
+  });
+}
+
+/* ------------------------------------------------------------ the archive */
+
+function folderSupported() {
+  return typeof window !== "undefined" && "showDirectoryPicker" in window;
+}
+
+async function pickFolder() {
+  const dir = await window.showDirectoryPicker({ id: "rom-archive", mode: "readwrite" });
+  DB.dir = dir;
+  await kvPut("dir", dir);
+  return dir;
+}
+
+/** Re-open the folder chosen last time. Chrome keeps the handle; permission
+    may need one click to restore, which is why this reports its own state. */
+async function restoreFolder() {
+  const dir = await kvGet("dir");
+  if (!dir) return { state: "none" };
+  let perm = await dir.queryPermission({ mode: "readwrite" });
+  if (perm === "granted") { DB.dir = dir; return { state: "granted", name: dir.name }; }
+  return { state: "prompt", name: dir.name, dir };
+}
+
+async function grantFolder(dir) {
+  const perm = await dir.requestPermission({ mode: "readwrite" });
+  if (perm === "granted") { DB.dir = dir; return true; }
+  return false;
+}
+
+async function listArchive() {
+  if (!DB.dir) return [];
+  const out = [];
+  for await (const [name, handle] of DB.dir.entries()) {
+    if (handle.kind !== "file" || !name.toLowerCase().endsWith(".csv")) continue;
+    const f = await handle.getFile();
+    out.push({ name, size: f.size, mtime: f.lastModified, handle });
+  }
+  DB.files = out;
+  return out;
+}
+
+/** Save a newly downloaded export into the archive folder, so the page keeps
+    the same append-only archive the other pipelines read. */
+async function addToArchive(file) {
+  if (!DB.dir) throw new Error("no-folder");
+  for (const f of DB.files)
+    if (f.name === file.name) throw new Error("exists");
+  const h = await DB.dir.getFileHandle(file.name, { create: true });
+  const w = await h.createWritable();
+  await w.write(await file.arrayBuffer());
+  await w.close();
+  return true;
+}
+
+async function hashText(s) {
+  const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(s));
+  return [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+async function fingerprint(files, cfg) {
+  const parts = files.slice().sort((a, b) => (a.name < b.name ? -1 : 1))
+    .map((f) => `${f.name}:${f.size}:${Math.round(f.mtime)}`);
+  parts.push("cfg:" + JSON.stringify(cfg));
+  return hashText(parts.join("|"));
+}
+
+/* ------------------------------------------------------------------ config */
+
+/** The same config.json the other two pipelines read. Looked for in the
+    archive folder first, so the rules can be edited without touching code. */
+async function loadConfig(defaults) {
+  if (DB.dir) {
+    try {
+      const h = await DB.dir.getFileHandle("config.json");
+      const txt = await (await h.getFile()).text();
+      DB.cfg = JSON.parse(txt);
+      DB.cfgSource = "folder";
+      return DB.cfg;
+    } catch { /* not there - fall through */ }
+  }
+  try {
+    const r = await fetch("config.json", { cache: "no-store" });
+    if (r.ok) { DB.cfg = await r.json(); DB.cfgSource = "site"; return DB.cfg; }
+  } catch { /* not served - fall through */ }
+  DB.cfg = defaults;
+  DB.cfgSource = "built-in";
+  return DB.cfg;
+}
+
+/* ------------------------------------------------------------- the engine */
+
+let RUN, EXPORT_TABLES;
+function wireEngine(runPipeline, exportTables) {
+  RUN = runPipeline; EXPORT_TABLES = exportTables;
+}
+
+/** Only the tables the screens need. master_long is left out on purpose: it is
+    by far the largest, and it is only needed for export and verification, so it
+    is recomputed on demand rather than carried around. */
+function lighten(res) {
+  return {
+    occ: res.occ, coverage: res.coverage, cleanMeta: res.cleanMeta,
+    sessions: res.sessions, usage: res.usage, summary: res.summary,
+    questionnaires: res.questionnaires, weekly: res.weekly,
+    changes: res.changes, quarantine: res.quarantine, flagged: res.flagged,
+    files: DB.files.map((f) => f.name),
+  };
+}
+
+async function build(onProgress = () => {}, { force = false } = {}) {
+  await listArchive();
+  if (!DB.files.length) return null;
+  const fp = await fingerprint(DB.files, DB.cfg);
+  DB.fingerprint = fp;
+
+  if (!force) {
+    const cached = await kvGet("light:" + fp);
+    if (cached) { DB.light = cached; onProgress("נטען מהזיכרון", 1); return cached; }
+  }
+
+  const withText = [];
+  for (let i = 0; i < DB.files.length; i++) {
+    const f = DB.files[i];
+    onProgress(`קורא ${f.name}`, (i / DB.files.length) * 0.4);
+    withText.push({ name: f.name, mtime: f.mtime,
+                    text: await (await f.handle.getFile()).text() });
+  }
+  const res = RUN(withText, DB.cfg, (msg, p) => onProgress(msg, 0.4 + p * 0.6));
+  DB.res = res;
+  DB.light = lighten(res);
+  await kvPut("light:" + fp, DB.light);
+  DB.verifyState = (await kvGet("verify")) || {};
+  return DB.light;
+}
+
+/** The full result, including master_long - built only when something needs it. */
+async function full(onProgress = () => {}) {
+  if (DB.res) return DB.res;
+  const withText = [];
+  for (const f of DB.files)
+    withText.push({ name: f.name, mtime: f.mtime,
+                    text: await (await f.handle.getFile()).text() });
+  DB.res = RUN(withText, DB.cfg, onProgress);
+  return DB.res;
+}
+
+/* --------------------------------------------------- the screens' API shape */
+
+const num = (v) => { const n = parseFloat(v); return Number.isFinite(n) ? n : null; };
+const inum = (v, d = 0) => { const n = num(v); return n === null ? d : Math.trunc(n); };
+
+function withDerived(occ, coverage) {
+  const th = new Map(coverage.map((c) => [c.patient_uuid, c.therapist || "ללא שיוך"]));
+  return occ.map((r) => ({
+    ...r,
+    month: r.date.slice(0, 7),
+    // "responded" means the form came back with answers - a form that was sent
+    // and never answered is the denominator, not a small kind of answer.
+    answered_occ: (r.completeness === "complete" || r.completeness === "partial") ? 1 : 0,
+    therapist: th.get(r.patient_uuid) || "ללא שיוך",
+  }));
+}
+
+function rate(rows, keys) {
+  if (typeof keys === "string") keys = [keys];
+  const agg = new Map();
+  for (const r of rows) {
+    const k = keys.map((x) => r[x]).join("\r");
+    let a = agg.get(k);
+    if (!a) { a = { sent: 0, answered: 0, complete: 0 }; agg.set(k, a); }
+    a.sent++; a.answered += r.answered_occ;
+    a.complete += r.completeness === "complete" ? 1 : 0;
+  }
+  return [...agg.entries()].map(([k, a]) => {
+    const rec = {};
+    k.split("\r").forEach((v, i) => (rec[keys[i]] = v));
+    return { ...rec, ...a, rate: a.sent ? Math.round((a.answered / a.sent) * 1e4) / 1e4 : 0 };
+  });
+}
+
+function verificationStatus() {
+  const st = DB.verifyState || {}, fp = DB.fingerprint;
+  const out = { fingerprint: fp, files: DB.files.map((f) => f.name) };
+  for (const kind of ["roundtrip", "reproduce"]) {
+    const e = st[kind];
+    if (!e) out[kind] = { state: "never" };
+    else if (e.fingerprint !== fp)
+      out[kind] = { state: "stale", when: e.when, ok: e.ok, summary: e.summary };
+    else
+      out[kind] = { state: e.ok ? "ok" : "failed", when: e.when, ok: e.ok,
+                    summary: e.summary };
+  }
+  return out;
+}
+
+async function saveVerify(kind, payload) {
+  DB.verifyState = DB.verifyState || {};
+  DB.verifyState[kind] = { ...payload, when: new Date().toISOString().slice(0, 19),
+                           fingerprint: DB.fingerprint };
+  await kvPut("verify", DB.verifyState);
+}
+
+function apiState() {
+  const L = DB.light;
+  if (!L) return { ready: false };
+  const occ = withDerived(L.occ, L.coverage);
+  const cov = L.coverage;
+
+  const months = rate(occ, "month").sort((a, b) => (a.month < b.month ? -1 : 1));
+  const ther = rate(occ, "therapist").sort((a, b) => b.sent - a.sent);
+  const ques = rate(occ, "questionnaire").sort((a, b) => b.sent - a.sent);
+  const grid = rate(occ, ["therapist", "month"]).filter((g) => g.sent >= 3);
+
+  const perPat = new Map(rate(occ, "patient_uuid").map((r) => [r.patient_uuid, r]));
+  const patients = cov.map((c) => {
+    const p = perPat.get(c.patient_uuid);
+    return { ...c, sent: p ? p.sent : 0, answered: p ? p.answered : 0,
+             rate: p ? p.rate : 0 };
+  });
+
+  const flagged = L.cleanMeta.filter((m) => m.review_flag).map((m) => m["Patient uuid"]);
+  const dates = occ.map((r) => r.date);
+  const nAns = occ.reduce((a, r) => a + r.answered_occ, 0);
+
+  return {
+    ready: true,
+    kpi: {
+      patients: cov.length, occasions: occ.length, answered: nAns,
+      complete: occ.filter((r) => r.completeness === "complete").length,
+      rate: occ.length ? Math.round((nAns / occ.length) * 1e4) / 1e4 : 0,
+      questionnaires: new Set(occ.map((r) => r.questionnaire)).size,
+      therapists: new Set(cov.map((c) => c.therapist)).size,
+      date_min: dates.length ? dates.reduce((a, b) => (b < a ? b : a)) : "",
+      date_max: dates.length ? dates.reduce((a, b) => (b > a ? b : a)) : "",
+      flagged: flagged.length, files: DB.files.length,
+    },
+    months, therapists: ther, questionnaires: ques, grid, patients,
+    questionnaire_list: [...new Set(occ.map((r) => r.questionnaire))].sort(),
+    therapist_list: [...new Set(cov.map((c) => c.therapist).filter(Boolean))].sort(),
+    diagnosis_list: [...new Set(cov.map((c) => c["Primary Diagnosis"]).filter(Boolean))].sort(),
+    flagged_uuids: flagged,
+    runs: [],
+    verification: verificationStatus(),
+  };
+}
+
+function apiPatient(uuid) {
+  const L = DB.light;
+  const o = L.occ.filter((r) => r.patient_uuid === uuid);
+  if (!o.length) return { found: false };
+  return {
+    found: true,
+    info: L.coverage.find((c) => c.patient_uuid === uuid) || {},
+    meta: L.cleanMeta.find((m) => m["Patient uuid"] === uuid) || {},
+    occasions: o.map((r) => ({
+      questionnaire: r.questionnaire, occasion: r.occasion, date: r.date,
+      completeness: r.completeness, n_active_answered: r.n_active_answered,
+      n_active_items: r.n_active_items, total_score: r.total_score,
+    })),
+  };
+}
+
+function filterPatients(cov, f, flaggedUuids) {
+  let sel = cov.slice();
+  const keep = (fn) => { sel = sel.filter(fn); };
+  if (f.excludeFlagged) {
+    const bad = new Set(flaggedUuids);
+    keep((r) => !bad.has(r.patient_uuid));
+  }
+  for (const [key, col] of [["minCompleteWeeks", "n_weeks_complete"],
+                            ["minPresentWeeks", "n_weeks_present"],
+                            ["minSessions", "n_sessions"],
+                            ["minOccasions", "n_occasions"]]) {
+    if (f[key]) { const v = parseInt(f[key], 10); keep((r) => inum(r[col]) >= v); }
+  }
+  if (f.genders && f.genders.length) {
+    const g = new Set(f.genders); keep((r) => g.has(r.Gender));
+  }
+  if (f.therapists && f.therapists.length) {
+    const t = new Set(f.therapists); keep((r) => t.has(r.therapist));
+  }
+  if (f.diagnoses && f.diagnoses.length) {
+    const d = new Set(f.diagnoses); keep((r) => d.has(r["Primary Diagnosis"]));
+  }
+  if (f.minAge) { const v = parseFloat(f.minAge); keep((r) => (num(r.Age) ?? -1) >= v); }
+  if (f.maxAge) { const v = parseFloat(f.maxAge); keep((r) => (num(r.Age) ?? 1e9) <= v); }
+  if (f.questionnaire && f.minQOccasions) {
+    const col = "n::" + f.questionnaire, v = parseInt(f.minQOccasions, 10);
+    keep((r) => inum(r[col]) >= v);
+  }
+  return sel;
+}
+
+function apiQuery(f) {
+  const L = DB.light;
+  const occ = withDerived(L.occ, L.coverage);
+  const flagged = L.cleanMeta.filter((m) => m.review_flag).map((m) => m["Patient uuid"]);
+  const sel = filterPatients(L.coverage, f, flagged);
+  const ids = new Set(sel.map((r) => r.patient_uuid));
+
+  let o = occ.filter((r) => ids.has(r.patient_uuid));
+  if (f.questionnaire) o = o.filter((r) => r.questionnaire === f.questionnaire);
+  if (f.dateFrom) o = o.filter((r) => r.date >= f.dateFrom);
+  if (f.dateTo) o = o.filter((r) => r.date <= f.dateTo);
+
+  const cols = ["patient_uuid", "Gender", "Age", "Primary Diagnosis", "therapist",
+                "n_sessions", "n_weeks_present", "n_weeks_complete", "n_occasions",
+                "n_complete_occasions", "n_not_answered_occasions",
+                "first_date", "last_date"];
+  return {
+    n_patients: sel.length, n_total: L.coverage.length,
+    n_occasions: o.length, n_answered: o.reduce((a, r) => a + r.answered_occ, 0),
+    rows: sel.slice(0, 500).map((r) => Object.fromEntries(cols.map((c) => [c, r[c] ?? ""]))),
+    truncated: sel.length > 500,
+  };
+}
+
+async function apiExport(f, toCSV, COLUMNS) {
+  const res = await full();
+  const L = DB.light;
+  const flagged = L.cleanMeta.filter((m) => m.review_flag).map((m) => m["Patient uuid"]);
+  const sel = filterPatients(L.coverage, f, flagged);
+  const ids = new Set(sel.map((r) => r.patient_uuid));
+  const shape = f.shape || "long";
+
+  let cols, rows;
+  if (shape === "patients") {
+    rows = sel;
+    cols = sel.length ? Object.keys(sel[0]) : ["patient_uuid"];
+  } else {
+    rows = res.clean.filter((r) => ids.has(r.patient_uuid));
+    if (f.questionnaire) rows = rows.filter((r) => r.questionnaire === f.questionnaire);
+    if (f.dateFrom) rows = rows.filter((r) => r.date >= f.dateFrom);
+    if (f.dateTo) rows = rows.filter((r) => r.date <= f.dateTo);
+    if (f.onlyAnswered) rows = rows.filter((r) => r.answered === 1);
+    if (shape === "wide") {
+      const occs = [...new Set(rows.map((r) => r.occasion))].sort((a, b) => a - b);
+      const piv = new Map();
+      for (const r of rows) {
+        const k = `${r.patient_uuid}\r${r.questionnaire}\r${r.field}`;
+        if (!piv.has(k)) piv.set(k, {});
+        piv.get(k)[r.occasion] = r.value;
+      }
+      cols = ["patient_uuid", "questionnaire", "field", ...occs.map((n) => "occ_" + n)];
+      rows = [...piv.keys()].sort().map((k) => {
+        const [pu, q, fl] = k.split("\r"), v = piv.get(k);
+        const row = { patient_uuid: pu, questionnaire: q, field: fl };
+        for (const n of occs) row["occ_" + n] = v[n] ?? "";
+        return row;
+      });
+    } else {
+      cols = COLUMNS.master_long;
+    }
+  }
+  return { csv: toCSV(cols, rows), n: rows.length, patients: sel.length };
+}
+
+/** Every output table, exactly as the R pipeline writes them, plus a record of
+    what produced them. Handed over as one archive. Nothing is written back into
+    the archive folder: the outputs are a pure function of it and are rebuilt on
+    every visit, so a stale copy sitting next to the exports would be a trap. */
+async function apiDownload(table, helpers) {
+  const res = await full();
+  const tables = helpers.exportTables(res);
+  tables["provenance.json"] = JSON.stringify({
+    run_at: new Date().toISOString().slice(0, 19),
+    engine: "browser",
+    user_agent: navigator.userAgent,
+    config_source: DB.cfgSource,
+    config: DB.cfg,
+    inputs: DB.files.map((f) => ({
+      file: f.name, bytes: f.size,
+      modified: new Date(f.mtime).toISOString().slice(0, 19),
+    })),
+    counts: res.summary,
+  }, null, 2);
+
+  if (table) {
+    if (!tables[table]) return { ok: false, msg: "אין טבלה בשם הזה" };
+    const type = table.endsWith(".json") ? "application/json;charset=utf-8"
+                                         : "text/csv;charset=utf-8";
+    return { ok: true, name: table, blob: new Blob([tables[table]], { type }) };
+  }
+  return { ok: true, name: `rom_output_${stamp()}.zip`, blob: zipStore(tables) };
+}
+
+/* -------------------------------------------------------- verification */
+
+async function apiRoundtrip(nSamples, seed, helpers) {
+  const { parseCSV, isoDate, ST_ANSWERED, ST_BLANK, ST_NOT } = helpers;
+  const res = await full();
+  const cfg = DB.cfg;
+  const nat = new Set(cfg.not_answered_tokens || ["N/A"]);
+  const exclQ = new Set(cfg.excluded_questionnaires || []);
+
+  const ordered = DB.files.slice().sort((a, b) => (a.name < b.name ? -1 : 1));
+  const newest = ordered[ordered.length - 1];
+  if (!newest) return { ok: false, msg: "אין קבצי מקור בארכיון" };
+  const table = parseCSV(await (await newest.handle.getFile()).text());
+  const header = (table[0] || []).map((h) => h.replace(/^﻿/, ""));
+  const rows = table.slice(1).filter((r) => r.some((c) => (c || "").trim() !== ""));
+
+  const idx = new Map();
+  for (const r of res.clean)
+    idx.set(`${r.patient_uuid}\r${r.questionnaire}\r${r.instance}\r${r.field}`,
+            [r.value, r.status]);
+  const kept = new Set(res.cleanMeta.map((m) => m["Patient uuid"]));
+
+  const COL = /^(.+?)\s+instance\s+(\d+)\s+(.+)$/;
+  const dateCol = new Map(), fieldsOf = new Map();
+  header.forEach((c, j) => {
+    const m = COL.exec(c);
+    if (!m) return;
+    const q = m[1].trim(), i = m[2], f = m[3].trim(), k = q + "\r" + i;
+    if (f === "Date") dateCol.set(k, { q, i, j });
+    else { if (!fieldsOf.has(k)) fieldsOf.set(k, []); fieldsOf.get(k).push([j, f]); }
+  });
+  const uuidJ = header.indexOf("Patient uuid");
+
+  // Sample from the cells that actually exist: an instance carrying a date, for
+  // a patient that survived cleaning. Naive sampling would spend most draws on
+  // empty instance slots and check almost nothing.
+  const groups = [], weights = [];
+  for (const [k, { q, i, j }] of dateCol) {
+    const flds = fieldsOf.get(k);
+    if (!flds || exclQ.has(q)) continue;
+    const keepRows = [];
+    rows.forEach((row, r) => {
+      if (kept.has(row[uuidJ]) && j < row.length && isoDate(row[j]) !== null)
+        keepRows.push(r);
+    });
+    if (keepRows.length) { groups.push({ q, i, keepRows, flds });
+                           weights.push(keepRows.length * flds.length); }
+  }
+  if (!groups.length) return { ok: false, msg: "אין תאים לבדיקה" };
+
+  const total = weights.reduce((a, b) => a + b, 0);
+  const n = Math.min(nSamples, total);
+  const rnd = mulberry32(seed === undefined || seed === null ? Date.now() : seed);
+  const cum = []; let acc = 0;
+  for (const w of weights) { acc += w; cum.push(acc); }
+
+  let checked = 0, mismatches = 0;
+  const examples = [];
+  for (let s = 0; s < n; s++) {
+    const t = rnd() * total;
+    let gi = cum.findIndex((c) => t < c); if (gi < 0) gi = groups.length - 1;
+    const g = groups[gi];
+    const r = g.keepRows[Math.floor(rnd() * g.keepRows.length)];
+    const [fj, f] = g.flds[Math.floor(rnd() * g.flds.length)];
+    const pu = rows[r][uuidJ];
+    const text = fj < rows[r].length ? (rows[r][fj] || "").trim() : "";
+    const want = nat.has(text) ? ST_NOT : text === "" ? ST_BLANK : ST_ANSWERED;
+    const wantVal = want === ST_ANSWERED ? text : "";
+
+    const got = idx.get(`${pu}\r${g.q}\r${g.i}\r${f}`);
+    checked++;
+    if (!got) {
+      mismatches++;
+      if (examples.length < 6)
+        examples.push({ what: "שורה חסרה במסד הנקי", q: g.q, field: f,
+                        raw: text || "(ריק)", clean: "—" });
+      continue;
+    }
+    const [gv, gs] = got;
+    const same = gs === want && (String(gv).trim() === wantVal ||
+      (num(gv) !== null && num(wantVal) !== null && Math.abs(num(gv) - num(wantVal)) < 1e-9));
+    if (!same) {
+      mismatches++;
+      if (examples.length < 6)
+        examples.push({ what: "ערך או מצב שונה", q: g.q, field: f,
+                        raw: `${text || "(ריק)"} → ${want}`,
+                        clean: `${gv || "(ריק)"} → ${gs}` });
+    }
+  }
+
+  const seq = new Map();
+  for (const r of res.occ) {
+    const k = r.patient_uuid + "\r" + r.questionnaire;
+    if (!seq.has(k)) seq.set(k, []);
+    seq.get(k).push(r.occasion);
+  }
+  const patsInLong = new Set(res.clean.map((r) => r.patient_uuid));
+  const structural = [
+    { name: "אף מטופל שהוסר אינו מופיע במסד הנקי",
+      ok: !res.quarantine.some((m) => patsInLong.has(m["Patient uuid"])) },
+    { name: "אף שאלון מוחרג אינו מופיע במסד הנקי",
+      ok: !res.clean.some((r) => exclQ.has(r.questionnaire)) },
+    { name: "כל מטופל במסד הנקי מופיע גם ברשימת המטופלים",
+      ok: [...patsInLong].every((p) => kept.has(p)) },
+    { name: "מספור המפגשים רציף ומתחיל באחד לכל שאלון",
+      ok: [...seq.values()].every((v) => {
+        const s = v.slice().sort((a, b) => a - b);
+        return s.every((x, i) => x === i + 1);
+      }) },
+    { name: "לכל שורה במסד הנקי יש מצב מוגדר",
+      ok: res.clean.every((r) => [ST_ANSWERED, ST_BLANK, ST_NOT].includes(r.status)) },
+  ];
+
+  const out = { ok: mismatches === 0 && structural.every((s) => s.ok),
+                file: newest.name, checked, mismatches, population: total,
+                examples, structural };
+  await saveVerify("roundtrip",
+    { ok: out.ok, summary: `${checked.toLocaleString("he-IL")} תאים נבדקו, ${mismatches} פערים` });
+  out.status = verificationStatus();
+  return out;
+}
+
+function mulberry32(a) {
+  return function () {
+    a |= 0; a = (a + 0x6D2B79F5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+/* Compare our tables against a folder produced elsewhere - the R pipeline, run
+   on another machine and zipped up. Type-aware, and row order is not assumed. */
+const KEYS = {
+  "master_long.csv": ["patient_uuid", "questionnaire", "occasion", "date", "field"],
+  "occasions.csv": ["patient_uuid", "questionnaire", "occasion"],
+  "master_patients.csv": ["Patient uuid"],
+  "coverage_by_patient.csv": ["patient_uuid"],
+  "quarantine.csv": ["Patient uuid"],
+  "review_needed.csv": ["Patient uuid"],
+  "item_usage.csv": ["questionnaire", "field"],
+  "sessions.csv": ["patient_uuid", "date"],
+  "value_changes.csv": ["patient_uuid", "questionnaire", "occasion", "date",
+                        "field", "source_file"],
+};
+
+function toObjects(text, parseCSV) {
+  const t = parseCSV(text);
+  if (!t.length) return { cols: [], rows: [] };
+  const cols = t[0].map((c) => c.replace(/^﻿/, ""));
+  const rows = t.slice(1).filter((r) => r.length && r.some((c) => c !== ""))
+    .map((r) => Object.fromEntries(cols.map((c, i) => [c, r[i] ?? ""])));
+  return { cols, rows };
+}
+
+async function compareWith(otherFiles, helpers) {
+  const { parseCSV, toCSV, COLUMNS } = helpers;
+  const res = await full();
+  const mine = helpers.exportTables(res);
+  const names = [...new Set([...Object.keys(mine), ...Object.keys(otherFiles)])].sort();
+  const tables = []; let allOk = true;
+
+  for (const n of names) {
+    const row = { table: n, status: "MATCH", rows: 0, cols: 0, diff_cells: 0,
+                  notes: [], examples: [] };
+    if (!mine[n] || !otherFiles[n]) {
+      row.status = "MISSING";
+      row.notes.push(`קיים רק בצד ${mine[n] ? "א" : "ב"}`);
+      tables.push(row); allOk = false; continue;
+    }
+    const A = toObjects(mine[n], parseCSV), B = toObjects(otherFiles[n], parseCSV);
+    const common = A.cols.filter((c) => B.cols.includes(c));
+    const onlyA = A.cols.filter((c) => !B.cols.includes(c));
+    const onlyB = B.cols.filter((c) => !A.cols.includes(c));
+    row.cols = common.length;
+
+    const k = (KEYS[n] || common).filter((c) => common.includes(c));
+    const srt = (x, y) => { for (const c of k) { if (x[c] < y[c]) return -1; if (x[c] > y[c]) return 1; } return 0; };
+    if (k.length) { A.rows.sort(srt); B.rows.sort(srt); }
+    row.rows = A.rows.length;
+
+    if (A.rows.length !== B.rows.length) {
+      row.status = "DIFFER";
+      row.notes.push(`מספר שורות: ${A.rows.length.toLocaleString("he-IL")} מול ${B.rows.length.toLocaleString("he-IL")}`);
+    }
+    if (onlyA.length || onlyB.length)
+      row.notes.push(`עמודות בצד א בלבד: ${onlyA.join(",") || "—"} · בצד ב בלבד: ${onlyB.join(",") || "—"}`);
+
+    if (A.rows.length === B.rows.length && A.rows.length) {
+      let bad = 0; const perCol = new Map();
+      for (const c of common) {
+        const va = A.rows.map((r) => r[c]), vb = B.rows.map((r) => r[c]);
+        const isNum = (arr) => { const nz = arr.filter((x) => x.trim() !== "");
+                                 return nz.length > 0 && nz.every((x) => num(x) !== null); };
+        const numeric = isNum(va) && isNum(vb);
+        for (let i = 0; i < va.length; i++) {
+          let same;
+          if (numeric) {
+            const a = num(va[i]), b = num(vb[i]);
+            same = (a === null && b === null) ||
+                   (a !== null && b !== null && Math.abs(a - b) <= 1e-9);
+          } else same = va[i].trim() === vb[i].trim();
+          if (!same) {
+            bad++; perCol.set(c, (perCol.get(c) || 0) + 1);
+            if (row.examples.length < 4 && perCol.get(c) === 1)
+              row.examples.push({ col: c, n: 0, row: i + 1,
+                                  a: String(va[i]).slice(0, 80), b: String(vb[i]).slice(0, 80) });
+          }
+        }
+      }
+      for (const e of row.examples) e.n = perCol.get(e.col);
+      row.diff_cells = bad;
+      if (bad) row.status = "DIFFER";
+    }
+    if (row.status !== "MATCH") allOk = false;
+    tables.push(row);
+  }
+  const bad = tables.filter((t) => t.status !== "MATCH");
+  await saveVerify("reproduce",
+    { ok: allOk, summary: `${tables.length} טבלאות הושוו, ${bad.length} נבדלות` });
+  return { ok: allOk, tables, status: verificationStatus() };
+}
+
+/* ------------------------------------------------- the fetch-shaped shim */
+
+function makeFetch(helpers) {
+  return async function fetch2(path, opts = {}) {
+    const body = opts.body && typeof opts.body === "string" ? JSON.parse(opts.body) : null;
+    let payload, blob = null, filename = "";
+
+    if (path === "/api/state") payload = apiState();
+    else if (path.startsWith("/api/patient/"))
+      payload = apiPatient(decodeURIComponent(path.slice("/api/patient/".length)));
+    else if (path === "/api/query") payload = apiQuery(body || {});
+    else if (path === "/api/export") {
+      const r = await apiExport(body || {}, helpers.toCSV, helpers.COLUMNS);
+      filename = `sample_${(body && body.shape) || "long"}_${stamp()}.csv`;
+      blob = new Blob([r.csv], { type: "text/csv;charset=utf-8" });
+      payload = { ok: true };
+    } else if (path === "/api/download") {
+      const r = await apiDownload((body && body.table) || null, helpers);
+      if (!r.ok) payload = r;
+      else { blob = r.blob; filename = r.name; payload = { ok: true }; }
+    } else if (path === "/api/verify/roundtrip")
+      payload = await apiRoundtrip((body && body.n) || 3000, body && body.seed, helpers);
+    else if (path === "/api/verify/status") payload = verificationStatus();
+    else payload = { ok: false, msg: "לא נתמך בגרסת הדפדפן" };
+
+    return {
+      ok: true,
+      json: async () => payload,
+      blob: async () => blob,
+      headers: { get: () => (filename ? `attachment; filename=${filename}` : "") },
+    };
+  };
+}
+
+function stamp() {
+  const d = new Date(), p = (n) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}_${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}`;
+}
+
+
+/* ===== screens (from ui.html, unchanged apart from the endpoint shim) ===== */
+
+const $=s=>document.querySelector(s), C=(t,a={})=>Object.assign(document.createElement(t),a);
+const NF=new Intl.NumberFormat('he-IL');
+const pct=v=>(v*100).toFixed(v<0.1?1:0)+'%';
+const SEQ=['--seq1','--seq2','--seq3','--seq4','--seq5'].map(v=>getComputedStyle(document.documentElement).getPropertyValue(v).trim());
+const cssv=n=>getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+let S=null, TIP=$('#tip');
+
+function tip(e,html){TIP.innerHTML=html;TIP.style.opacity=1;
+  const r=TIP.getBoundingClientRect();
+  TIP.style.left=Math.min(e.clientX+14,innerWidth-r.width-10)+'px';
+  TIP.style.top=Math.max(8,e.clientY-r.height-12)+'px';}
+const untip=()=>TIP.style.opacity=0;
+
+function seqColor(v,max){ // sequential blue, light->dark
+  if(max<=0)return SEQ[0];
+  const i=Math.min(SEQ.length-1,Math.floor(v/max*SEQ.length));
+  return SEQ[i];
+}
+const rateBadge=r=>{const c=r>=.5?'b-ok':r>=.3?'b-mid':'b-low';return `<span class="badge ${c}">${pct(r)}</span>`;};
+
+// ---------------------------------------------------------------- charts
+function lineChart(data,{x,y,w=760,h=220,fmt=pct,label='',cap=null}){
+  const m={t:14,r:34,b:30,l:46}, iw=w-m.l-m.r, ih=h-m.t-m.b;
+  let ymax=Math.max(...data.map(d=>d[y]),0.001)*1.12;
+  if(cap!=null) ymax=Math.min(ymax,cap);   // a rate axis never exceeds 100%
+  const px=i=>m.l+(data.length<2?iw/2:i/(data.length-1)*iw);
+  const py=v=>m.t+ih-v/ymax*ih;
+  const NS='http://www.w3.org/2000/svg';
+  const svg=document.createElementNS(NS,'svg');
+  svg.setAttribute('viewBox',`0 0 ${w} ${h}`);svg.setAttribute('width',w);svg.setAttribute('height',h);
+  svg.setAttribute('direction','ltr');
+  const add=(t,a)=>{const e=document.createElementNS(NS,t);for(const k in a)e.setAttribute(k,a[k]);svg.appendChild(e);return e;};
+  for(let i=0;i<=4;i++){const v=ymax*i/4;
+    add('line',{x1:m.l,x2:w-m.r,y1:py(v),y2:py(v),class:'gl'});
+    const t=add('text',{x:m.l-8,y:py(v)+4,class:'ax','text-anchor':'end'});t.textContent=fmt(v);}
+  const d=data.map((p,i)=>`${i?'L':'M'}${px(i)},${py(p[y])}`).join(' ');
+  add('path',{d,fill:'none',stroke:cssv('--s1'),'stroke-width':2,'stroke-linejoin':'round','stroke-linecap':'round'});
+  const step=Math.ceil(data.length/12);
+  data.forEach((p,i)=>{
+    if(i%step===0||i===data.length-1){const t=add('text',{x:px(i),y:h-10,class:'ax','text-anchor':'middle'});t.textContent=p[x];}
+    add('circle',{cx:px(i),cy:py(p[y]),r:3.5,fill:cssv('--s1'),stroke:cssv('--surface'),'stroke-width':2});
+    const hit=add('rect',{x:px(i)-iw/(data.length*2)-2,y:m.t,width:Math.max(10,iw/data.length),height:ih,fill:'transparent'});
+    hit.style.cursor='crosshair';
+    hit.addEventListener('mousemove',e=>tip(e,`<b>${p[x]}</b><br>${label}: ${fmt(p[y])}<br>נשלחו ${NF.format(p.sent)} · נענו ${NF.format(p.answered)}`));
+    hit.addEventListener('mouseleave',untip);
+  });
+  return svg;
+}
+
+function barChart(data,{cat,val,w=760,barH=26,fmt=pct,sub=null}){
+  const m={t:8,r:60,b:8,l:150}, ih=data.length*barH, h=ih+m.t+m.b, iw=w-m.l-m.r;
+  const max=Math.max(...data.map(d=>d[val]),0.001);
+  const NS='http://www.w3.org/2000/svg';
+  const svg=document.createElementNS(NS,'svg');
+  svg.setAttribute('viewBox',`0 0 ${w} ${h}`);svg.setAttribute('width',w);svg.setAttribute('height',h);
+  svg.setAttribute('direction','ltr');
+  const add=(t,a)=>{const e=document.createElementNS(NS,t);for(const k in a)e.setAttribute(k,a[k]);svg.appendChild(e);return e;};
+  data.forEach((d,i)=>{
+    const y=m.t+i*barH, bw=Math.max(2,d[val]/max*iw);
+    const t=add('text',{x:m.l-10,y:y+barH/2+4,class:'axl','text-anchor':'end'});
+    t.textContent=d[cat].length>22?d[cat].slice(0,21)+'…':d[cat];
+    add('rect',{x:m.l,y:y+4,width:bw,height:barH-10,rx:4,fill:cssv('--s1')});
+    const vl=add('text',{x:m.l+bw+8,y:y+barH/2+4,class:'axl'});vl.textContent=fmt(d[val]);
+    const hit=add('rect',{x:0,y,width:w,height:barH,fill:'transparent'});
+    hit.addEventListener('mousemove',e=>tip(e,`<b>${d[cat]}</b><br>${fmt(d[val])}${sub?'<br>'+sub(d):''}`));
+    hit.addEventListener('mouseleave',untip);
+  });
+  return svg;
+}
+
+function heatmap(rows,cols,get,{w=980,cell=26,rowLab=150}){
+  const h=rows.length*cell+40;
+  const cw=Math.max(20,(w-rowLab-10)/cols.length);
+  const NS='http://www.w3.org/2000/svg';
+  const svg=document.createElementNS(NS,'svg');
+  svg.setAttribute('viewBox',`0 0 ${w} ${h}`);svg.setAttribute('width',w);svg.setAttribute('height',h);
+  svg.setAttribute('direction','ltr');
+  const add=(t,a)=>{const e=document.createElementNS(NS,t);for(const k in a)e.setAttribute(k,a[k]);svg.appendChild(e);return e;};
+  cols.forEach((c,j)=>{if(j%2===0){
+    const t=add('text',{x:rowLab+j*cw+cw/2,y:14,class:'ax','text-anchor':'middle'});t.textContent=c.slice(2);}});
+  rows.forEach((r,i)=>{
+    const y=26+i*cell;
+    const t=add('text',{x:rowLab-10,y:y+cell/2+4,class:'axl','text-anchor':'end'});
+    t.textContent=r.length>20?r.slice(0,19)+'…':r;
+    cols.forEach((c,j)=>{
+      const d=get(r,c); const x=rowLab+j*cw;
+      // missing is marked by FORM (empty, dashed) not by a pale shade, so it can
+      // never be mistaken for a genuine near-zero response rate
+      if(!d){add('rect',{x:x+1,y:y+1,width:cw-2,height:cell-2,rx:3,fill:'none',
+        stroke:cssv('--line'),'stroke-width':1,'stroke-dasharray':'2 2'});return;}
+      const rc=add('rect',{x:x+1,y:y+1,width:cw-2,height:cell-2,rx:3,fill:seqColor(d.rate,1)});
+      rc.style.cursor='pointer';
+      rc.addEventListener('mousemove',e=>tip(e,`<b>${r}</b> · ${c}<br>היענות: ${pct(d.rate)}<br>נשלחו ${NF.format(d.sent)} · נענו ${NF.format(d.answered)}`));
+      rc.addEventListener('mouseleave',untip);
+    });
+  });
+  return svg;
+}
+
+const box=(title,sub,el)=>{const c=C('div',{className:'card'});
+  c.innerHTML=`<h2>${title}</h2><p class="sub">${sub}</p>`;
+  const b=C('div',{className:'chartbox'});b.appendChild(el);c.appendChild(b);return c;};
+
+// ---------------------------------------------------------------- panels
+function renderOverview(){
+  const k=S.kpi, p=$('#over'); p.innerHTML='';
+  const kp=C('div',{className:'kpis'});
+  const cards=[
+    ['מטופלים',NF.format(k.patients),`${k.therapists} מטפלים`],
+    ['שאלונים שנשלחו',NF.format(k.occasions),`${k.questionnaires} סוגים`],
+    ['נענו',NF.format(k.answered),`מתוכם ${NF.format(k.complete)} במלואם`],
+    ['שיעור היענות כולל',pct(k.rate),'מכלל השאלונים שנשלחו'],
+    ['טווח הנתונים',k.date_min.slice(0,7)+' — '+k.date_max.slice(0,7),`${k.files} הורדות בארכיון`],
+    ['סומנו לבדיקה',NF.format(k.flagged),'נשארו בנתונים'],
+  ];
+  cards.forEach(([l,v,n])=>{const c=C('div',{className:'kpi'});
+    c.innerHTML=`<div class="lab">${l}</div><div class="val mono">${v}</div><div class="note">${n}</div>`;kp.appendChild(c);});
+  p.appendChild(kp);
+
+  p.appendChild(C('div',{className:'hint',innerHTML:
+    `<b>שני שלישים מהשאלונים שנשלחו מעולם לא נענו.</b> המספר הזה קיים רק מפני שהמערכת שומרת שורה גם לשאלון שנשלח ולא מולא. השורות הריקות הן מדד ההיענות, לא רעש.`}));
+
+  // months with a handful of questionnaires are noise, not signal - a single
+  // answered questionnaire in a month would otherwise plot as 100%
+  const MIN_N=25, solid=S.months.filter(m=>m.sent>=MIN_N), thin=S.months.length-solid.length;
+  p.appendChild(box('שיעור ההיענות לאורך זמן',
+    `חלק השאלונים שנשלחו וגם נענו, לפי חודש${thin?`. ${thin} חודשים עם פחות מ־${MIN_N} שאלונים הושמטו כרעש`:''}`,
+    lineChart(solid,{x:'month',y:'rate',label:'היענות',cap:1})));
+
+  const g=C('div',{className:'grid2'});
+  g.appendChild(box('היענות לפי מטפל','רק מטפלים שנשלחו למטופליהם 200 שאלונים ומעלה, כדי שהשיעור יהיה יציב',
+    barChart([...S.therapists].filter(t=>t.sent>=200).sort((a,b)=>b.rate-a.rate),
+      {cat:'therapist',val:'rate',w:640,sub:d=>`נשלחו ${NF.format(d.sent)} · נענו ${NF.format(d.answered)}`})));
+  g.appendChild(box('היענות לפי שאלון','עשרת השאלונים שנשלחו הכי הרבה',
+    barChart([...S.questionnaires].slice(0,10).sort((a,b)=>b.rate-a.rate),
+      {cat:'questionnaire',val:'rate',w:640,sub:d=>`נשלחו ${NF.format(d.sent)} · נענו ${NF.format(d.answered)}`})));
+  p.appendChild(g);
+}
+
+function renderAdherence(){
+  const p=$('#adh'); p.innerHTML='';
+  const months=[...new Set(S.grid.map(d=>d.month))].sort();
+  const ths=[...new Set(S.grid.map(d=>d.therapist))];
+  const order=S.therapists.filter(t=>ths.includes(t.therapist)).sort((a,b)=>b.sent-a.sent).map(t=>t.therapist);
+  const idx={}; S.grid.forEach(d=>idx[d.therapist+'|'+d.month]=d);
+  const hm=heatmap(order,months,(r,c)=>idx[r+'|'+c],{w:Math.max(900,months.length*30+160)});
+  const c=box('מטפל על פני זמן','כל תא הוא שיעור ההיענות של מטופלי אותו מטפל באותו חודש. אפור פירושו פחות משלושה שאלונים. כהה יותר, היענות גבוהה יותר',hm);
+  const lg=C('div',{className:'legend'});
+  lg.innerHTML='<span>0%</span>'+SEQ.map(x=>`<i style="background:${x}"></i>`).join('')+
+    '<span>100%</span><i style="border:1px dashed var(--line);background:none;margin-inline-start:14px"></i><span>מעט מדי נתונים</span>';
+  c.appendChild(lg); p.appendChild(c);
+
+  p.appendChild(box('נפח מול היענות','לכל מטפל: כמה שאלונים נשלחו למטופליו',
+    barChart([...S.therapists].sort((a,b)=>b.sent-a.sent),
+      {cat:'therapist',val:'sent',fmt:v=>NF.format(Math.round(v)),w:900,
+       sub:d=>`היענות ${pct(d.rate)} · נענו ${NF.format(d.answered)}`})));
+
+  const rows=[...S.patients].sort((a,b)=>(b.sent||0)-(a.sent||0));
+  const t=C('div',{className:'card'});
+  t.innerHTML=`<h2>היענות לפי מטופל</h2><p class="sub">${rows.length} מטופלים. לחיצה על שורה פותחת את מסלול המטופל</p>`;
+  const sc=C('div',{className:'scroll'});
+  sc.innerHTML=`<table><thead><tr><th>מזהה</th><th>מטפל</th><th>אבחנה</th><th>נשלחו</th><th>נענו</th><th>היענות</th><th>מפגשים</th><th>שבועות מלאים</th><th>אחרון</th></tr></thead><tbody>${
+    rows.map(r=>`<tr data-u="${r.patient_uuid}" style="cursor:pointer"><td class="mono">${String(r.patient_uuid).slice(0,8)}</td><td>${r.therapist||''}</td><td>${r['Primary Diagnosis']||''}</td><td class="mono">${NF.format(r.sent||0)}</td><td class="mono">${NF.format(r.answered||0)}</td><td>${r.sent?rateBadge(r.rate):''}</td><td class="mono">${r.n_sessions||0}</td><td class="mono">${r.n_weeks_complete||0}</td><td class="mono">${r.last_date||''}</td></tr>`).join('')}</tbody></table>`;
+  sc.addEventListener('click',e=>{const tr=e.target.closest('tr[data-u]');
+    if(tr){document.querySelector('nav button[data-p=pat]').click();$('#psel').value=tr.dataset.u;loadPatient();}});
+  t.appendChild(sc); p.appendChild(t);
+}
+
+function renderSample(){
+  const p=$('#samp'); p.innerHTML='';
+  const c=C('div',{className:'card'});
+  c.innerHTML=`<h2>בונה מדגם</h2><p class="sub">כל סינון מעדכן את הספירה מיד. הייצוא שומר לידו קובץ שמתעד את הפילטרים המדויקים</p>
+  <div class="filters">
+    <div><label>לפחות שבועות מלאים</label><input type="number" id="f_cw" min="0" placeholder="לדוגמה 8"></div>
+    <div><label>לפחות שבועות שנשלחו</label><input type="number" id="f_pw" min="0"></div>
+    <div><label>לפחות מפגשים</label><input type="number" id="f_ses" min="0"></div>
+    <div><label>לפחות מדידות סה״כ</label><input type="number" id="f_occ" min="0"></div>
+    <div><label>גיל מ־</label><input type="number" id="f_amin"></div>
+    <div><label>גיל עד</label><input type="number" id="f_amax"></div>
+    <div><label>מתאריך</label><input type="date" id="f_df"></div>
+    <div><label>עד תאריך</label><input type="date" id="f_dt"></div>
+    <div><label>מין</label><select id="f_g" multiple><option value="male">גבר</option><option value="female">אישה</option></select></div>
+    <div><label>מטפל</label><select id="f_th" multiple>${S.therapist_list.map(x=>`<option>${x}</option>`).join('')}</select></div>
+    <div><label>אבחנה</label><select id="f_dx" multiple>${S.diagnosis_list.map(x=>`<option>${x}</option>`).join('')}</select></div>
+    <div><label>שאלון מסוים</label><select id="f_q"><option value="">— הכול —</option>${S.questionnaire_list.map(x=>`<option>${x}</option>`).join('')}</select>
+      <label style="margin-top:8px">לפחות מדידות בשאלון הזה</label><input type="number" id="f_qn" min="0"></div>
+  </div>
+  <div class="row">
+    <label style="margin:0;display:flex;gap:6px;align-items:center"><input type="checkbox" id="f_fl" style="width:auto"> ללא מסומנים לבדיקה</label>
+    <label style="margin:0;display:flex;gap:6px;align-items:center"><input type="checkbox" id="f_an" style="width:auto"> רק שאלות שנענו בפועל</label>
+    <span style="flex:1"></span>
+    <select id="f_shape" style="width:auto"><option value="long">טבלה ארוכה</option><option value="wide">טבלה רחבה</option><option value="patients">רשימת מטופלים</option></select>
+    <button class="act" id="btn_x">ייצוא</button>
+  </div>
+  <div id="qres" style="margin-top:18px"></div>`;
+  p.appendChild(c);
+  c.querySelectorAll('input,select').forEach(el=>el.addEventListener('change',runQuery));
+  $('#btn_x').addEventListener('click',doExport);
+  runQuery();
+}
+
+const filters=()=>({
+  minCompleteWeeks:$('#f_cw').value, minPresentWeeks:$('#f_pw').value,
+  minSessions:$('#f_ses').value, minOccasions:$('#f_occ').value,
+  minAge:$('#f_amin').value, maxAge:$('#f_amax').value,
+  dateFrom:$('#f_df').value, dateTo:$('#f_dt').value,
+  genders:[...$('#f_g').selectedOptions].map(o=>o.value),
+  therapists:[...$('#f_th').selectedOptions].map(o=>o.value),
+  diagnoses:[...$('#f_dx').selectedOptions].map(o=>o.value),
+  questionnaire:$('#f_q').value, minQOccasions:$('#f_qn').value,
+  excludeFlagged:$('#f_fl').checked, onlyAnswered:$('#f_an').checked,
+  shape:$('#f_shape').value});
+
+async function runQuery(){
+  const r=await(await fetch2('/api/query',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify(filters())})).json();
+  $('#qres').innerHTML=`<div class="kpis" style="margin-bottom:14px">
+    <div class="kpi"><div class="lab">מטופלים במדגם</div><div class="val mono">${NF.format(r.n_patients)}</div><div class="note">מתוך ${NF.format(r.n_total)}</div></div>
+    <div class="kpi"><div class="lab">שאלונים</div><div class="val mono">${NF.format(r.n_occasions)}</div><div class="note">נענו ${NF.format(r.n_answered)}</div></div>
+    <div class="kpi"><div class="lab">היענות במדגם</div><div class="val mono">${r.n_occasions?pct(r.n_answered/r.n_occasions):'—'}</div><div class="note">בטווח שנבחר</div></div>
+  </div>
+  <div class="scroll"><table><thead><tr><th>מזהה</th><th>מין</th><th>גיל</th><th>אבחנה</th><th>מטפל</th><th>מפגשים</th><th>שבועות מלאים</th><th>מדידות</th><th>ראשון</th><th>אחרון</th></tr></thead><tbody>${
+    r.rows.map(x=>`<tr><td class="mono">${String(x.patient_uuid).slice(0,8)}</td><td>${x.Gender==='male'?'גבר':'אישה'}</td><td class="mono">${x.Age}</td><td>${x['Primary Diagnosis']||''}</td><td>${x.therapist||''}</td><td class="mono">${x.n_sessions}</td><td class="mono">${x.n_weeks_complete}</td><td class="mono">${x.n_occasions}</td><td class="mono">${x.first_date}</td><td class="mono">${x.last_date}</td></tr>`).join('')}</tbody></table></div>
+  ${r.truncated?'<p class="sub" style="margin-top:8px">מוצגות 500 השורות הראשונות. הייצוא כולל הכול</p>':''}`;
+}
+
+async function doExport(){
+  const b=$('#btn_x'); b.textContent='מייצא…'; b.disabled=true;
+  const res=await fetch2('/api/export',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify(filters())});
+  const blob=await res.blob();
+  const a=C('a',{href:URL.createObjectURL(blob),download:(res.headers.get('content-disposition')||'').split('filename=').pop()||'sample.csv'});
+  document.body.appendChild(a);a.click();a.remove();
+  b.textContent='ייצוא'; b.disabled=false;
+}
+
+/* --- the download tab ----------------------------------------------------
+   The screens answer questions; this hands over the tables themselves, in the
+   same shape the R pipeline writes, so anything the page cannot answer can be
+   taken to a statistics package. */
+async function grab(table, btn){
+  const was=btn.textContent; btn.textContent='מכין…'; btn.disabled=true;
+  $('#dl_msg').textContent='';
+  try{
+    const res=await fetch2('/api/download',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({table})});
+    const j=await res.json();
+    if(!j.ok){$('#dl_msg').textContent=j.msg||'לא הצלחתי להכין את הקובץ'; return;}
+    const blob=await res.blob();
+    const name=(res.headers.get('content-disposition')||'').split('filename=').pop()||'rom_output.zip';
+    const url=URL.createObjectURL(blob);
+    const a=C('a',{href:url,download:name});
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(()=>URL.revokeObjectURL(url),4000);
+    $('#dl_msg').innerHTML=`ירד <span dir="ltr" class="mono">${name}</span> · ${(blob.size/1048576).toFixed(1)} מגה־בייט`;
+  }catch(e){ $('#dl_msg').textContent='לא הצלחתי להכין את הקובץ: '+(e.message||e); }
+  finally{ btn.textContent=was; btn.disabled=false; }
+}
+
+function renderDownload(){
+  const p=$('#dl'); p.innerHTML='';
+  const c=C('div',{className:'card'});
+  c.innerHTML=`<h2>הורדת התוצרים</h2>
+    <p class="sub">אותן טבלאות שהצינור בשפת אר כותב, באותם שמות ובאותן עמודות בדיוק. הן מחושבות עכשיו מהארכיון שבמחשב שלך, ההורדה נשארת אצלך, ושום דבר לא נשלח לשום מקום.</p>
+    <div class="row"><button class="act" id="dl_all">הורדת הכול כקובץ מכווץ</button>
+      <span class="muted" id="dl_msg"></span></div>`;
+  p.appendChild(c);
+
+  const t=C('div',{className:'card'});
+  t.innerHTML=`<h2>טבלה בודדת</h2><p class="sub">אם צריך רק אחת מהן</p>
+    <div class="scroll"><table><thead><tr><th>קובץ</th><th>מה יש בו</th><th></th></tr></thead><tbody>${
+      TABLE_INFO.map(([n,d])=>`<tr><td class="mono" dir="ltr">${n}</td><td>${d}</td>
+        <td style="text-align:end"><button class="act ghost dl1" data-t="${n}">הורדה</button></td></tr>`).join('')
+    }</tbody></table></div>`;
+  p.appendChild(t);
+
+  p.appendChild(C('div',{className:'hint',innerHTML:
+    `<b>ההורדה היא צילום רגע, לא מקור.</b> המקור הוא הארכיון, והתוצרים נבנים ממנו מחדש בכל פתיחה. אין טעם לסנכרן את הקובץ הזה או לגבות אותו — מספיק לשמור על הארכיון, ואפשר לייצר אותו שוב בכל רגע. מי שרוצה לדעת מה בדיוק ייצר קובץ מסוים ימצא את זה בתוכו, בקובץ הפרוונאנס.`}));
+
+  $('#dl_all').addEventListener('click',e=>grab(null,e.currentTarget));
+  p.querySelectorAll('.dl1').forEach(b=>
+    b.addEventListener('click',e=>grab(e.currentTarget.dataset.t,e.currentTarget)));
+}
+
+function renderPatientPanel(){
+  const p=$('#pat'); p.innerHTML='';
+  // flagged patients sort last so the default selection is a clean case
+  const flagged=new Set(S.flagged_uuids||[]);
+  const opts=[...S.patients].sort((a,b)=>
+      (flagged.has(a.patient_uuid)-flagged.has(b.patient_uuid))||((b.n_occasions||0)-(a.n_occasions||0)))
+    .map(r=>`<option value="${r.patient_uuid}">${String(r.patient_uuid).slice(0,8)} · ${r.therapist||''} · ${r['Primary Diagnosis']||''} · ${r.n_occasions} מדידות${flagged.has(r.patient_uuid)?' · מסומן':''}</option>`).join('');
+  const c=C('div',{className:'card'});
+  c.innerHTML=`<h2>מסלול מטופל</h2><p class="sub">כל השאלונים של מטופל אחד על ציר זמן</p>
+    <select id="psel">${opts}</select>`;
+  p.appendChild(c);
+  p.appendChild(C('div',{id:'pbody'}));
+  $('#psel').addEventListener('change',loadPatient);
+  loadPatient();
+}
+
+async function loadPatient(){
+  const u=$('#psel').value, body=$('#pbody');
+  body.innerHTML='<div class="spin">טוען…</div>';
+  const r=await(await fetch2('/api/patient/'+u)).json();
+  if(!r.found){body.innerHTML='<div class="card">אין נתונים</div>';return;}
+  body.innerHTML='';
+  const i=r.info;
+  const kp=C('div',{className:'kpis'});
+  [['מטפל',i.therapist||'—',''],['אבחנה',i['Primary Diagnosis']||'—',''],
+   ['גיל / מין',`${i.Age} · ${i.Gender==='male'?'גבר':'אישה'}`,''],
+   ['מפגשים',NF.format(i.n_sessions||0),`${i.n_weeks_complete||0} שבועות מלאים`],
+   ['מדידות',NF.format(i.n_occasions||0),`${i.n_complete_occasions||0} מלאות`],
+   ['היענות',i.n_occasions?pct((i.n_responded_occasions||0)/i.n_occasions):'—','']
+  ].forEach(([l,v,n])=>{const x=C('div',{className:'kpi'});
+    x.innerHTML=`<div class="lab">${l}</div><div class="val" style="font-size:17px">${v}</div><div class="note">${n}</div>`;kp.appendChild(x);});
+  body.appendChild(kp);
+  if(r.meta.review_flag) body.appendChild(C('div',{className:'hint',
+    innerHTML:`<b>מסומן לבדיקה:</b> ${r.meta.review_flag}`}));
+
+  const byQ={}; r.occasions.forEach(o=>{(byQ[o.questionnaire]??=[]).push(o);});
+  const qs=Object.keys(byQ).sort((a,b)=>byQ[b].length-byQ[a].length);
+  qs.forEach(q=>{
+    const rows=byQ[q].slice().sort((a,b)=>a.date<b.date?-1:1);
+    const withScore=rows.filter(o=>o.total_score!==null&&o.total_score!==undefined&&o.total_score!=='');
+    const el=C('div');
+    if(withScore.length>=2){
+      el.appendChild(lineChart(withScore.map(o=>({month:o.date.slice(2,7),date:o.date,
+          v:+o.total_score,sent:1,answered:1})),
+        // small score ranges need a decimal, or the axis prints "3,3,2,1,0"
+        {x:'month',y:'v',w:820,h:170,label:'ציון',
+         fmt:v=>Math.max(...withScore.map(o=>+o.total_score))<8?v.toFixed(1):v.toFixed(0)}));
+    }
+    el.appendChild(stripChart(rows));
+    const lg=C('div',{className:'legend'});
+    lg.innerHTML=`<i style="background:${cssv('--good')};height:11px"></i><span>נענה במלואו</span>
+      <i style="background:${cssv('--warn')};height:6px"></i><span>חלקי</span>
+      <i style="background:${cssv('--s8')};height:5px"></i><span>הוחזר ריק</span>
+      <i style="background:${cssv('--line')};height:3px"></i><span>נשלח ולא נענה</span>`;
+    el.appendChild(lg);
+    const nResp=rows.filter(o=>o.completeness==='complete'||o.completeness==='partial').length;
+    body.appendChild(box(q,`${rows.length} נשלחו · ${nResp} נענו`,el));
+  });
+}
+
+function stripChart(rows){
+  const NS='http://www.w3.org/2000/svg', cw=13, w=Math.max(300,rows.length*cw+10), h=30;
+  const svg=document.createElementNS(NS,'svg');
+  svg.setAttribute('viewBox',`0 0 ${w} ${h}`);svg.setAttribute('width',w);svg.setAttribute('height',h);
+  svg.setAttribute('direction','ltr');
+  // colour AND height carry the state, so the three levels stay distinguishable
+  // for a colour-blind reader: full block = answered, half = partial, thin rule = never answered
+  const spec={complete:{c:cssv('--good'),h:16,y:7},
+              partial:{c:cssv('--warn'),h:9,y:11},
+              empty:{c:cssv('--s8'),h:6,y:12},
+              not_answered:{c:cssv('--line'),h:3,y:14}};
+  const LAB={complete:'נענה במלואו',partial:'נענה חלקית',
+             empty:'הוחזר ריק לגמרי',not_answered:'נשלח ולא נענה'};
+  rows.forEach((o,i)=>{
+    const s=spec[o.completeness]||spec.not_answered;
+    const r=document.createElementNS(NS,'rect');
+    r.setAttribute('x',5+i*cw);r.setAttribute('y',s.y);r.setAttribute('width',cw-3);
+    r.setAttribute('height',s.h);r.setAttribute('rx',2);
+    r.setAttribute('fill',s.c);
+    r.style.cursor='pointer';
+    const lab=LAB[o.completeness]||o.completeness;
+    r.addEventListener('mousemove',e=>tip(e,`<b>${o.date}</b><br>${lab}<br>${o.n_active_answered}/${o.n_active_items} פריטים${o.total_score?'<br>ציון: '+o.total_score:''}`));
+    r.addEventListener('mouseleave',untip);
+    svg.appendChild(r);
+  });
+  return svg;
+}
+
+function renderUpdate(){
+  const p=$('#upd'); p.innerHTML='';
+  const c=C('div',{className:'card'});
+  c.innerHTML=`<h2>הוספת הורדה חדשה</h2>
+    <p class="sub">הקובץ נשמר בארכיון והמאגר נבנה מחדש מכל הקבצים יחד. אפשר לגרור לכאן</p>
+    <div class="drop" id="drop">גרור לכאן קובץ, או לחץ לבחירה<input type="file" id="fin" accept=".csv" hidden></div>
+    <div id="ulog" style="margin-top:14px"></div>`;
+  p.appendChild(c);
+  const rl=C('div',{className:'card'});
+  rl.innerHTML=`<h2>היסטוריית הרצות</h2><p class="sub">כל שורה היא בנייה מחדש של המאגר</p>
+    <div class="scroll"><table><thead><tr><th>מתי</th><th>קבצים</th><th>מטופלים</th><th>מדידות</th><th>שאלונים שנשלחו</th><th>ערכים שהשתנו</th><th>תאריך אחרון</th></tr></thead><tbody>${
+      (S.runs||[]).slice().reverse().map(r=>`<tr><td class="mono">${String(r.run_at).replace('T',' ')}</td><td class="mono">${r.files}</td><td class="mono">${r.patients_kept}</td><td class="mono">${NF.format(r.rows_kept)}</td><td class="mono">${NF.format(r.occasions_kept)}</td><td class="mono">${r.values_changed_between_exports}</td><td class="mono">${r.date_max}</td></tr>`).join('')}</tbody></table></div>`;
+  p.appendChild(rl);
+
+  const d=$('#drop'), fin=$('#fin');
+  d.addEventListener('click',()=>fin.click());
+  d.addEventListener('dragover',e=>{e.preventDefault();d.classList.add('over')});
+  d.addEventListener('dragleave',()=>d.classList.remove('over'));
+  d.addEventListener('drop',e=>{e.preventDefault();d.classList.remove('over');
+    if(e.dataTransfer.files[0])upload(e.dataTransfer.files[0]);});
+  fin.addEventListener('change',()=>fin.files[0]&&upload(fin.files[0]));
+}
+
+async function upload(file){
+  const log=$('#ulog'); log.innerHTML='<div class="spin">מעלה ובונה מחדש…</div>';
+  const fd=new FormData(); fd.append('file',file);
+  const r=await(await fetch2('/api/upload',{method:'POST',body:fd})).json();
+  log.innerHTML=(r.ok?'<div class="hint">הקובץ נוסף והמאגר נבנה מחדש</div>':
+    `<div class="hint" style="border-color:var(--bad)">${r.msg||'שגיאה'}</div>`)+
+    (r.log?`<pre>${r.log.replace(/</g,'&lt;')}</pre>`:'');
+  if(r.ok)await boot();
+}
+
+// ---------------------------------------------------------------- verify
+const VSTATE={ok:['vb-ok','✓ שחזור אומת'],failed:['vb-bad','✕ השחזור נכשל'],
+  stale:['vb-stale','⚠ הנתונים השתנו מאז האימות'],never:['vb-never','○ טרם אומת']};
+
+function worstState(v){
+  const s=[v.roundtrip.state,v.reproduce.state];
+  if(s.includes('failed'))return 'failed';
+  if(s.includes('never'))return 'never';
+  if(s.includes('stale'))return 'stale';
+  return 'ok';
+}
+function renderBadge(){
+  const v=S.verification; if(!v)return;
+  const st=worstState(v), [cls,txt]=VSTATE[st];
+  const b=$('#vbadge');
+  b.innerHTML=`<span class="vb ${cls}" title="לחיצה פותחת את לשונית האימות">${txt}</span>`;
+  b.onclick=()=>document.querySelector('nav button[data-p=ver]').click();
+}
+function stateRow(label,e){
+  const [cls,txt]=VSTATE[e.state];
+  const when=e.when?` · ${String(e.when).replace('T',' ').slice(0,16)}`:'';
+  return `<tr><td>${label}</td><td><span class="vb ${cls}" style="cursor:default">${txt}</span></td>
+    <td class="mono" style="color:var(--ink3)">${e.summary||''}${when}</td></tr>`;
+}
+
+function renderVerify(){
+  const p=$('#ver'); p.innerHTML='';
+  const v=S.verification||{roundtrip:{state:'never'},reproduce:{state:'never'}};
+  const sum=C('div',{className:'card'});
+  sum.innerHTML=`<h2>מצב האימות</h2>
+    <p class="sub">האימות תקף רק לקבצי המקור שעליהם הוא רץ. ברגע שמוסיפים הורדה חדשה, המצב חוזר ל"הנתונים השתנו" עד שמריצים שוב</p>
+    <table><tbody>${stateRow('נאמנות למקור',v.roundtrip)}${stateRow('שחזור עצמאי',v.reproduce)}</tbody></table>
+    <p class="sub" style="margin:14px 0 0">קבצי המקור כרגע: <span class="mono" dir="ltr">${(v.files||[]).join(', ')||'—'}</span></p>`;
+  p.appendChild(sum);
+  p.appendChild(C('div',{className:'hint',innerHTML:
+    `שתי בדיקות שונות. <b>נאמנות למקור</b> שואלת אם המסד הנקי מייצג נכון את קבצי ההורדה המקוריים — היא דוגמת תאים ישירות מהקובץ הגולמי ועוקבת אחריהם פנימה. <b>שחזור עצמאי</b> שואל אם מימוש שני, שרץ על אותם קבצי מקור, מגיע לאותה תוצאה — זו הבדיקה שעורך או עמית יכולים לחזור עליה בעצמם.`}));
+
+  const c1=C('div',{className:'card'});
+  c1.innerHTML=`<h2>נאמנות למקור</h2>
+    <p class="sub">דוגמת תאים אקראיים מקובץ ההורדה האחרון ומוודאת שכל אחד מהם מופיע במסד הנקי עם אותו ערך ואותו מצב. בנוסף חמש בדיקות מבנה</p>
+    <div class="row" style="margin-top:0">
+      <div style="width:170px"><label>כמה תאים לדגום</label>
+        <select id="rt_n"><option>1000</option><option selected>3000</option><option>10000</option><option>30000</option></select></div>
+      <button class="act" id="rt_go" style="align-self:end">הרץ בדיקה</button>
+    </div>
+    <div id="rt_res" style="margin-top:16px"></div>`;
+  p.appendChild(c1);
+
+  const c2=C('div',{className:'card'});
+  c2.innerHTML=`<h2>שחזור עצמאי</h2>
+    <p class="sub">מריץ את הצינור בשפת אר על אותם קבצי מקור ומשווה טבלה מול טבלה, תא מול תא. אפשר גם להעלות תיקיית תוצאה שנוצרה במחשב אחר, כקובץ מכווץ</p>
+    <div class="row" style="margin-top:0">
+      <button class="act" id="rp_go">הרץ והשווה</button>
+      <button class="act ghost" id="rp_up">העלאת תוצאה ממחשב אחר</button>
+      <input type="file" id="rp_file" accept=".zip" hidden>
+    </div>
+    <div id="rp_res" style="margin-top:16px"></div>`;
+  p.appendChild(c2);
+
+  const c3=C('div',{className:'card'});
+  c3.innerHTML=`<h2>אם בדיקה נכשלה</h2>
+    <p class="sub">כישלון הוא מידע, לא תקלה. שני סוגי כישלון, ולכל אחד משמעות אחרת</p>
+    <p style="font-size:13px;margin:12px 0 0"><b>נאמנות למקור נכשלה</b> — יש באג בקריאה או בשינוי המבנה, והמסד הנקי לא מייצג נכון את ההורדה. אל תשתמש בו לניתוח עד שזה נפתר.</p>
+    <ol class="steps">
+      <li>הסתכל בטבלת הדוגמאות — היא מראה את השאלון, הפריט, מה כתוב במקור ומה נכנס למסד</li>
+      <li>הסתכל אם כל הפערים באותו שאלון או באותו סוג שדה. דפוס כזה מצביע כמעט תמיד על אסימון חדש שמערכת המקור התחילה לכתוב</li>
+      <li>אם זה אסימון חדש, הוסף אותו לרשימה <span class="mono" dir="ltr">not_answered_tokens</span> בקובץ ההגדרות, בנה מחדש, והרץ שוב</li>
+      <li>אם זה לא אסימון — שמור את הדוגמאות והעבר אותן הלאה. זה באג שצריך תיקון בקוד</li>
+    </ol>
+    <p style="font-size:13px;margin:16px 0 0"><b>שחזור עצמאי נכשל</b> — שני המימושים קראו את אותם קבצים והגיעו לתוצאות שונות. המסד עצמו עשוי להיות תקין, אבל ההגדרה שלו דו־משמעית, ולכן הוא לא ניתן לשחזור אמין.</p>
+    <ol class="steps">
+      <li>הסתכל אילו טבלאות נבדלות ובאיזו עמודה. עמודה אחת בטבלה אחת היא כלל אחד לא מוגדר דיו</li>
+      <li>הסיבות השכיחות: תיקו בין שני ערכים שהכלל לא יודע לשבור, ושתי רשומות של אותו שאלון באותו יום</li>
+      <li>עד שזה נפתר, אל תפרסם תוצאה שמתבססת על העמודה הזו. שאר הטבלאות שסומנו כזהות תקפות</li>
+      <li>שמור את הדוח — הוא מצביע בדיוק על הכלל שצריך לחדד</li>
+    </ol>
+    <p class="sub" style="margin-top:14px">שתי הבדיקות לא משנות שום נתון. הן קוראות בלבד, ואפשר להריץ אותן כמה פעמים שרוצים.</p>`;
+  p.appendChild(c3);
+
+  $('#rt_go').addEventListener('click',runRoundtrip);
+  $('#rp_go').addEventListener('click',()=>runReproduce('/api/verify/reproduce'));
+  $('#rp_up').addEventListener('click',()=>$('#rp_file').click());
+  $('#rp_file').addEventListener('change',e=>{
+    if(e.target.files[0]) runReproduce('/api/verify/upload',e.target.files[0]);});
+}
+
+const verdict=(ok,txt)=>`<div class="card" style="margin:0 0 14px;border-color:${ok?cssv('--good'):cssv('--bad')};
+  background:color-mix(in srgb,${ok?cssv('--good'):cssv('--bad')} 8%,var(--surface))">
+  <div style="font-size:15px;font-weight:650;color:${ok?cssv('--good'):cssv('--bad')}">${ok?'✓ עבר':'✕ נכשל'}</div>
+  <div style="font-size:13px;color:var(--ink2);margin-top:4px">${txt}</div></div>`;
+
+async function runRoundtrip(){
+  const b=$('#rt_go'), box=$('#rt_res');
+  b.disabled=true; box.innerHTML='<div class="spin">בודק…</div>';
+  const r=await(await fetch2('/api/verify/roundtrip',{method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({n:+$('#rt_n').value})})).json();
+  b.disabled=false;
+  if(r.msg&&!r.checked){box.innerHTML=`<div class="hint">${r.msg}</div>`;return;}
+  let h=verdict(r.ok, r.ok
+    ? `${NF.format(r.checked)} תאים נבדקו מול הקובץ <span dir="ltr">${r.file}</span> — אפס פערים. כל חמש בדיקות המבנה עברו`
+    : `${NF.format(r.mismatches)} פערים מתוך ${NF.format(r.checked)} תאים שנבדקו`);
+  h+=`<table style="margin-bottom:14px"><tbody>
+    <tr><td>קובץ המקור שנבדק</td><td class="mono" dir="ltr">${r.file}</td></tr>
+    <tr><td>תאים שנבדקו</td><td class="mono">${NF.format(r.checked)}</td></tr>
+    <tr><td>פערים</td><td class="mono">${NF.format(r.mismatches)}</td></tr>
+    <tr><td>מתוך אוכלוסייה של</td><td class="mono">${NF.format(r.population)} תאים</td></tr>
+  </tbody></table>`;
+  h+='<table><thead><tr><th>בדיקת מבנה</th><th>תוצאה</th></tr></thead><tbody>'+
+    r.structural.map(x=>`<tr><td>${x.name}</td><td>${x.ok?
+      `<span class="badge b-ok">עבר</span>`:`<span class="badge b-low">נכשל</span>`}</td></tr>`).join('')+
+    '</tbody></table>';
+  if(r.examples&&r.examples.length) h+=`<h2 style="margin-top:18px;font-size:14px">דוגמאות לפערים</h2>
+    <table><thead><tr><th>מה</th><th>שאלון</th><th>פריט</th><th>במקור</th><th>במסד הנקי</th></tr></thead><tbody>${
+      r.examples.map(e=>`<tr><td>${e.what}</td><td>${e.q}</td><td>${e.field}</td><td class="mono">${e.raw}</td><td class="mono">${e.clean}</td></tr>`).join('')}</tbody></table>`;
+  box.innerHTML=h;
+  if(r.status){S.verification=r.status; renderBadge(); renderVerify();
+    document.querySelector('nav button[data-p=ver]').click(); $('#rt_res').innerHTML=h;}
+}
+
+async function runReproduce(url,file){
+  const box=$('#rp_res');
+  box.innerHTML='<div class="spin">מריץ ומשווה… זה עשוי לקחת דקה</div>';
+  let r;
+  if(file){const fd=new FormData(); fd.append('file',file);
+    r=await(await fetch2(url,{method:'POST',body:fd})).json();}
+  else r=await(await fetch2(url,{method:'POST'})).json();
+
+  if(!r.tables){
+    box.innerHTML=`<div class="hint" style="border-color:var(--bad)">${r.msg||'שגיאה'}</div>`+
+      (r.log?`<pre>${r.log.replace(/</g,'&lt;')}</pre>`:'');
+    return;
+  }
+  const bad=r.tables.filter(t=>t.status!=='MATCH');
+  let h=verdict(r.ok, r.ok
+    ? `${r.tables.length} טבלאות הושוו מול <span dir="ltr">${r.source}</span> — כל הערכים זהים`
+    : `${bad.length} טבלאות נבדלות`);
+  h+='<table><thead><tr><th>טבלה</th><th>תוצאה</th><th>שורות</th><th>עמודות</th><th>תאים שונים</th></tr></thead><tbody>'+
+    r.tables.map(t=>`<tr><td class="mono" dir="ltr">${t.table}</td><td>${
+      t.status==='MATCH'?'<span class="badge b-ok">זהה</span>':'<span class="badge b-low">נבדל</span>'
+    }</td><td class="mono">${NF.format(t.rows)}</td><td class="mono">${t.cols}</td><td class="mono">${t.diff_cells||''}</td></tr>`).join('')+
+    '</tbody></table>';
+  bad.forEach(t=>{
+    h+=`<h2 style="margin-top:18px;font-size:14px" dir="ltr">${t.table}</h2>`;
+    if(t.notes.length) h+='<p class="sub">'+t.notes.join(' · ')+'</p>';
+    if(t.examples.length) h+='<table><thead><tr><th>עמודה</th><th>שורה</th><th>תאים</th><th>צד א</th><th>צד ב</th></tr></thead><tbody>'+
+      t.examples.map(e=>`<tr><td>${e.col}</td><td class="mono">${e.row}</td><td class="mono">${e.n}</td><td class="mono">${e.a}</td><td class="mono">${e.b}</td></tr>`).join('')+'</tbody></table>';
+  });
+  box.innerHTML=h;
+  if(r.status){S.verification=r.status; renderBadge(); renderVerify();
+    document.querySelector('nav button[data-p=ver]').click(); $('#rp_res').innerHTML=h;}
+}
+
+// ---------------------------------------------------------------- boot
+async function boot(){
+  S=await(await fetch2('/api/state')).json();
+  if(!S.ready){
+    $('#over').innerHTML=`<div class="card"><h2>ברוך הבא</h2>
+      <p class="sub">הארכיון ריק, ולכן אין עדיין מה להציג</p>
+      <ol class="steps" style="margin-top:14px">
+        <li>עבור ללשונית <b>עדכון</b></li>
+        <li>גרור לשם את קובץ ההורדה האחרון מהמערכת</li>
+        <li>המערכת תבנה את המסד ותרענן את המסך לבד</li>
+      </ol>
+      <p class="sub" style="margin-top:14px">אפשר גם לגרור מספר הורדות בזו אחר זו — הן ימוזגו לפי תאריך, וההיסטוריה תישמר.</p></div>`;
+    $('#upd').innerHTML='';
+    const c=C('div',{className:'card'});
+    c.innerHTML=`<h2>הוספת הורדה חדשה</h2>
+      <p class="sub">הקובץ נשמר בארכיון והמאגר נבנה מחדש מכל הקבצים יחד. אפשר לגרור לכאן</p>
+      <div class="drop" id="drop">גרור לכאן קובץ, או לחץ לבחירה<input type="file" id="fin" accept=".csv" hidden></div>
+      <div id="ulog" style="margin-top:14px"></div>`;
+    $('#upd').appendChild(c);
+    $('#dl').innerHTML=`<div class="card"><h2>הורדת התוצרים</h2>
+      <p class="sub">אין עדיין מה להוריד — הארכיון ריק. אחרי שתוסיף הורדה אחת בלשונית עדכון, הטבלאות ייבנו וייפתחו כאן.</p></div>`;
+    const d=$('#drop'), fin=$('#fin');
+    d.addEventListener('click',()=>fin.click());
+    d.addEventListener('dragover',e=>{e.preventDefault();d.classList.add('over')});
+    d.addEventListener('dragleave',()=>d.classList.remove('over'));
+    d.addEventListener('drop',e=>{e.preventDefault();d.classList.remove('over');
+      if(e.dataTransfer.files[0])upload(e.dataTransfer.files[0]);});
+    fin.addEventListener('change',()=>fin.files[0]&&upload(fin.files[0]));
+    return;
+  }
+  $('#stamp').textContent=`${NF.format(S.kpi.patients)} מטופלים · ${NF.format(S.kpi.occasions)} שאלונים · עודכן עד ${S.kpi.date_max}`;
+  renderOverview(); renderAdherence(); renderSample(); renderPatientPanel(); renderUpdate(); renderDownload(); renderVerify(); renderBadge();
+}
+document.querySelectorAll('nav button').forEach(b=>b.addEventListener('click',()=>{
+  document.querySelectorAll('nav button').forEach(x=>x.classList.remove('on'));
+  document.querySelectorAll('.panel').forEach(x=>x.classList.remove('on'));
+  b.classList.add('on'); $('#'+b.dataset.p).classList.add('on');}));
+
+/* ===== shell ===== */
+const DEFAULT_CFG = {
+  "_comment": "Cleaning rules. Nothing is ever deleted from raw/ - excluded patients land in output/quarantine.csv with a reason, flagged ones stay in the data with a review_flag.",
+  "_raw_dir_comment": "Where the archive of downloaded exports lives. Empty = the raw/ folder next to this file. Point it at a synced folder (e.g. a Google Drive folder marked 'available offline') to share ONE archive across your machines. Outputs are always written locally next to the code and must NOT be synced - they are rebuilt on every run.",
+  "raw_dir": "",
+  "drop_patients_with_no_questionnaires": true,
+  "_missing_comment": "The source writes this token in EVERY field of a questionnaire that was sent but never answered. It is not the same as a blank item on a form the patient DID answer, and the two must not be merged - one is questionnaire non-response, the other is item-level skipping.",
+  "not_answered_tokens": [
+    "N/A"
+  ],
+  "_safety_comment": "A patient with at least this many measurement occasions is NEVER auto-excluded, no matter which rule fires - they get review_flag instead. This is what stops a placeholder like 'XX' from deleting a real 300-session patient. Set to 0 to disable the guard.",
+  "never_exclude_above_occasions": 5,
+  "_exclude_comment": "Rules below are confident enough to remove the patient outright.",
+  "test_staff_names": [
+    "Yoni Shalom",
+    "Joni Shalom"
+  ],
+  "test_text_patterns_exclude": [
+    "test notes",
+    "^test\\b",
+    "^דמו$"
+  ],
+  "manual_exclude_uuids": [],
+  "_review_comment": "Rules below only FLAG - the patient stays in the dataset. Move a pattern up to the exclude list once you've confirmed it.",
+  "test_text_patterns_review": [
+    "^x+$",
+    "^sum$",
+    "בדיקה",
+    "^\\.+$"
+  ],
+  "min_plausible_age": 12,
+  "max_plausible_age": 100,
+  "test_text_fields": [
+    "Notes",
+    "Intake Summary"
+  ],
+  "manual_keep_uuids": [],
+  "excluded_questionnaires": [
+    "Test placeholders"
+  ],
+  "normalize_text_case_columns": [
+    "Primary Diagnosis",
+    "Comorbidities"
+  ],
+  "_completeness_comment": "An item counts toward completeness only if it is actually in use - answered in at least this share of that questionnaire's answered occasions. Stops a dead/conditional item from marking every occasion 'partial'. See output/item_usage.csv.",
+  "active_item_min_response_rate": 0.05,
+  "conflict_policy": "newest_file_wins",
+  "_weekly_comment": "The weekly session battery. 'required_for_complete_week' decides what counts as a complete week - edit to loosen or tighten.",
+  "weekly_questionnaires": [
+    "שביעות רצון שבועית לפני פגישה (Pre meeting ORS)",
+    "מצב רגשי- לפני פגישה (Pre meeting EPoC)",
+    "שאלות על ההתמכרות בשבוע האחרון- לפני פגישה (Pre meeting- addiction)",
+    "תחושות לאחר הפגישה (Post meeting- SRS)",
+    "שאלות על ההתמכרות בסיום הפגישה (Post meeting- addiction)",
+    "טבלת ניטור צריכה"
+  ],
+  "required_for_complete_week": [
+    "שביעות רצון שבועית לפני פגישה (Pre meeting ORS)",
+    "מצב רגשי- לפני פגישה (Pre meeting EPoC)",
+    "שאלות על ההתמכרות בשבוע האחרון- לפני פגישה (Pre meeting- addiction)"
+  ]
+};
+/* =========================================================================
+   Startup shell: pick the archive folder, build, show the screens.
+
+   The archive is a real folder on disk - the same one the Python and R
+   pipelines read. The browser is granted access to it once and remembers it,
+   so there is nothing to upload and nothing to re-select on later visits.
+   ========================================================================= */
+
+const GATE = document.getElementById("gate");
+const APP = document.getElementById("app");
+
+const helpers = { parseCSV, toCSV, COLUMNS, exportTables, isoDate,
+                  ST_ANSWERED, ST_BLANK, ST_NOT };
+wireEngine(runPipeline, exportTables);
+window.fetch2 = makeFetch(helpers);
+
+function gate(html) { GATE.innerHTML = html; GATE.hidden = false; APP.hidden = true; }
+function showApp() { GATE.hidden = true; APP.hidden = false; }
+
+function progressBox(title, note) {
+  gate(`<div class="card"><h2>${title}</h2><p class="big" id="pmsg">${note || ""}</p>
+        <div class="bar"><i id="pbar"></i></div>
+        <p class="muted" id="pnote"></p></div>`);
+}
+function progress(msg, p) {
+  const b = document.getElementById("pbar"), m = document.getElementById("pmsg");
+  if (b) b.style.width = Math.round((p || 0) * 100) + "%";
+  if (m) m.textContent = msg;
+}
+
+function welcome(extra = "") {
+  if (!folderSupported()) {
+    gate(`<div class="card"><h2>הדפדפן הזה לא נתמך</h2>
+      <p class="big">הגישה הקבועה לתיקייה קיימת בכרום ובאדג' בלבד. פתח את הדף
+      באחד מהם — פיירפוקס וספארי לא תומכים בזה.</p></div>`);
+    return;
+  }
+  gate(`<div class="card">
+    <h2>ניטור שאלונים</h2>
+    <p class="big">בחר את תיקיית הארכיון — זו שבה יושבים קבצי ההורדה מהמערכת.
+    הדפדפן יזכור אותה, וכל פתיחה הבאה תעלה ישר לנתונים.</p>
+    ${extra}
+    <button class="act" id="pick">בחר תיקיית ארכיון</button>
+    <p class="muted" style="margin-top:16px">הנתונים נקראים מהתיקייה ומחושבים כאן,
+    בתוך הדפדפן. שום דבר לא נשלח לשום מקום — לא לאתר הזה ולא לשום שרת.</p>
+  </div>`);
+  document.getElementById("pick").addEventListener("click", async () => {
+    try { await pickFolder(); await start(); }
+    catch (e) { if (e && e.name !== "AbortError") welcome(
+      `<div class="hint" style="border-color:var(--bad)">לא ניתן לפתוח את התיקייה: ${e.message}</div>`); }
+  });
+}
+
+async function start() {
+  progressBox("בונה את המסד", "רגע");
+  await loadConfig(DEFAULT_CFG);
+  const light = await build(progress);
+  if (!light) {
+    gate(`<div class="card"><h2>הארכיון ריק</h2>
+      <p class="big">התיקייה שבחרת לא מכילה קבצי הורדה. שים בה את הקובץ האחרון
+      שהורדת מהמערכת, ואז רענן.</p>
+      <button class="act" id="again">בחר תיקייה אחרת</button></div>`);
+    document.getElementById("again").addEventListener("click", () => welcome());
+    return;
+  }
+  showApp();
+  await boot();
+  const src = { folder: "מהתיקייה", site: "מהאתר", "built-in": "ברירת מחדל" }[DB.cfgSource];
+  const st = document.getElementById("stamp");
+  if (st) st.title = `הגדרות ${src} · ארכיון: ${DB.dir ? DB.dir.name : ""}`;
+}
+
+/* --- adding a new download: write it into the archive, then rebuild -------- */
+async function upload(file) {
+  const log = document.getElementById("ulog");
+  if (log) log.innerHTML = '<div class="spin">שומר בארכיון ובונה מחדש…</div>';
+  try {
+    await addToArchive(file);
+  } catch (e) {
+    if (log) log.innerHTML = `<div class="hint" style="border-color:var(--bad)">${
+      e.message === "exists" ? `הקובץ ${file.name} כבר בארכיון` :
+      "לא ניתן לכתוב לתיקייה"}</div>`;
+    return;
+  }
+  progressBox("בונה מחדש", file.name + " נוסף לארכיון");
+  await build(progress, { force: true });
+  showApp();
+  await boot();
+}
+
+/* --- independent reproduction: compare against an R output folder --------- */
+async function runReproduce(url, file) {
+  const box = document.getElementById("rp_res");
+  if (url !== "/api/verify/upload") {
+    box.innerHTML = `<div class="hint">דפדפן לא יכול להריץ שפת אר. הרץ במחשב שיש
+      בו שפת אר את הפקודה <span class="mono" dir="ltr">Rscript rom_pipeline.R</span>,
+      ואז לחץ כאן על <b>בחר תיקיית תוצאה להשוואה</b> ובחר את התיקייה
+      <span class="mono" dir="ltr">output_R</span> שנוצרה.</div>`;
+    return;
+  }
+  box.innerHTML = '<div class="spin">קורא ומשווה…</div>';
+  let other;
+  try {
+    const dir = await window.showDirectoryPicker({ id: "rom-compare" });
+    other = {};
+    for await (const [name, h] of dir.entries())
+      if (h.kind === "file" && name.endsWith(".csv"))
+        other[name] = await (await h.getFile()).text();
+  } catch (e) {
+    box.innerHTML = e && e.name === "AbortError" ? "" :
+      `<div class="hint" style="border-color:var(--bad)">${e.message}</div>`;
+    return;
+  }
+  const r = await compareWith(other, helpers);
+  r.source = "תיקייה שנבחרה";
+  renderReproduce(r);
+}
+
+function renderReproduce(r) {
+  const box = document.getElementById("rp_res");
+  const bad = r.tables.filter((t) => t.status !== "MATCH");
+  let h = verdict(r.ok, r.ok
+    ? `${r.tables.length} טבלאות הושוו מול ${r.source} — כל הערכים זהים`
+    : `${bad.length} טבלאות נבדלות`);
+  h += '<table><thead><tr><th>טבלה</th><th>תוצאה</th><th>שורות</th><th>עמודות</th><th>תאים שונים</th></tr></thead><tbody>' +
+    r.tables.map((t) => `<tr><td class="mono" dir="ltr">${t.table}</td><td>${
+      t.status === "MATCH" ? '<span class="badge b-ok">זהה</span>'
+                           : '<span class="badge b-low">נבדל</span>'
+    }</td><td class="mono">${NF.format(t.rows)}</td><td class="mono">${t.cols}</td><td class="mono">${t.diff_cells || ""}</td></tr>`).join("") +
+    "</tbody></table>";
+  bad.forEach((t) => {
+    h += `<h2 style="margin-top:18px;font-size:14px" dir="ltr">${t.table}</h2>`;
+    if (t.notes.length) h += '<p class="sub">' + t.notes.join(" · ") + "</p>";
+    if (t.examples.length)
+      h += '<table><thead><tr><th>עמודה</th><th>שורה</th><th>תאים</th><th>צד א</th><th>צד ב</th></tr></thead><tbody>' +
+        t.examples.map((e) => `<tr><td>${e.col}</td><td class="mono">${e.row}</td><td class="mono">${e.n}</td><td class="mono">${e.a}</td><td class="mono">${e.b}</td></tr>`).join("") +
+        "</tbody></table>";
+  });
+  box.innerHTML = h;
+  if (r.status) { S.verification = r.status; renderBadge(); renderVerify();
+                  document.querySelector("nav button[data-p=ver]").click();
+                  document.getElementById("rp_res").innerHTML = h; }
+}
+
+/* the compare button in the verify tab picks a folder rather than a zip */
+function relabelVerifyButtons() {
+  const up = document.getElementById("rp_up");
+  if (up) up.textContent = "בחר תיקיית תוצאה להשוואה";
+  const go = document.getElementById("rp_go");
+  if (go) go.textContent = "למה אין כאן הרצה אוטומטית";
+}
+const _renderVerify = renderVerify;
+renderVerify = function () { _renderVerify(); relabelVerifyButtons();
+  const up = document.getElementById("rp_up");
+  if (up) { const c = up.cloneNode(true); up.replaceWith(c);
+            c.addEventListener("click", () => runReproduce("/api/verify/upload")); } };
+
+/* ------------------------------------------------------------------ boot */
+(async function () {
+  if (!folderSupported()) { welcome(); return; }
+  const r = await restoreFolder();
+  if (r.state === "granted") { await start(); return; }
+  if (r.state === "prompt") {
+    gate(`<div class="card"><h2>ברוך שובך</h2>
+      <p class="big">הדפדפן זוכר את תיקיית הארכיון
+      <span class="mono" dir="ltr">${r.name}</span>, וצריך את אישורך כדי לקרוא
+      ממנה שוב. לחיצה אחת, ואתה בפנים.</p>
+      <button class="act" id="grant">פתח את הארכיון</button>
+      <p class="muted" style="margin-top:14px">אפשר גם
+      <a href="#" id="other">לבחור תיקייה אחרת</a>.</p></div>`);
+    document.getElementById("grant").addEventListener("click", async () => {
+      if (await grantFolder(r.dir)) await start();
+      else welcome('<div class="hint" style="border-color:var(--bad)">ההרשאה לא ניתנה</div>');
+    });
+    document.getElementById("other").addEventListener("click", (e) => {
+      e.preventDefault(); welcome();
+    });
+    return;
+  }
+  welcome();
+})();
+
+</script>
+</body>
+</html>

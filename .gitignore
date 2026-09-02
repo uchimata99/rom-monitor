@@ -1,0 +1,10 @@
+# ============================================================================
+#  PATIENT DATA MUST NEVER REACH THIS REPOSITORY.
+#  This repo is public code. The archive lives on your own machine.
+# ============================================================================
+raw/
+*.csv
+output/
+output_R/
+exports/
+access.json

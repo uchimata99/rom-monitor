@@ -1,0 +1,61 @@
+{
+  "_comment": "Cleaning rules. Nothing is ever deleted from raw/ - excluded patients land in output/quarantine.csv with a reason, flagged ones stay in the data with a review_flag.",
+  "_raw_dir_comment": "Where the archive of downloaded exports lives. Empty = the raw/ folder next to this file. Point it at a synced folder (e.g. a Google Drive folder marked 'available offline') to share ONE archive across your machines. Outputs are always written locally next to the code and must NOT be synced - they are rebuilt on every run.",
+  "raw_dir": "",
+  "drop_patients_with_no_questionnaires": true,
+  "_missing_comment": "The source writes this token in EVERY field of a questionnaire that was sent but never answered. It is not the same as a blank item on a form the patient DID answer, and the two must not be merged - one is questionnaire non-response, the other is item-level skipping.",
+  "not_answered_tokens": [
+    "N/A"
+  ],
+  "_safety_comment": "A patient with at least this many measurement occasions is NEVER auto-excluded, no matter which rule fires - they get review_flag instead. This is what stops a placeholder like 'XX' from deleting a real 300-session patient. Set to 0 to disable the guard.",
+  "never_exclude_above_occasions": 5,
+  "_exclude_comment": "Rules below are confident enough to remove the patient outright.",
+  "test_staff_names": [
+    "Yoni Shalom",
+    "Joni Shalom"
+  ],
+  "test_text_patterns_exclude": [
+    "test notes",
+    "^test\\b",
+    "^דמו$"
+  ],
+  "manual_exclude_uuids": [],
+  "_review_comment": "Rules below only FLAG - the patient stays in the dataset. Move a pattern up to the exclude list once you've confirmed it.",
+  "test_text_patterns_review": [
+    "^x+$",
+    "^sum$",
+    "בדיקה",
+    "^\\.+$"
+  ],
+  "min_plausible_age": 12,
+  "max_plausible_age": 100,
+  "test_text_fields": [
+    "Notes",
+    "Intake Summary"
+  ],
+  "manual_keep_uuids": [],
+  "excluded_questionnaires": [
+    "Test placeholders"
+  ],
+  "normalize_text_case_columns": [
+    "Primary Diagnosis",
+    "Comorbidities"
+  ],
+  "_completeness_comment": "An item counts toward completeness only if it is actually in use - answered in at least this share of that questionnaire's answered occasions. Stops a dead/conditional item from marking every occasion 'partial'. See output/item_usage.csv.",
+  "active_item_min_response_rate": 0.05,
+  "conflict_policy": "newest_file_wins",
+  "_weekly_comment": "The weekly session battery. 'required_for_complete_week' decides what counts as a complete week - edit to loosen or tighten.",
+  "weekly_questionnaires": [
+    "שביעות רצון שבועית לפני פגישה (Pre meeting ORS)",
+    "מצב רגשי- לפני פגישה (Pre meeting EPoC)",
+    "שאלות על ההתמכרות בשבוע האחרון- לפני פגישה (Pre meeting- addiction)",
+    "תחושות לאחר הפגישה (Post meeting- SRS)",
+    "שאלות על ההתמכרות בסיום הפגישה (Post meeting- addiction)",
+    "טבלת ניטור צריכה"
+  ],
+  "required_for_complete_week": [
+    "שביעות רצון שבועית לפני פגישה (Pre meeting ORS)",
+    "מצב רגשי- לפני פגישה (Pre meeting EPoC)",
+    "שאלות על ההתמכרות בשבוע האחרון- לפני פגישה (Pre meeting- addiction)"
+  ]
+}
